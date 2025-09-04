@@ -39,10 +39,12 @@ import AttachmentIcon from './icons/AttachmentIcon';
 import MicrophoneIcon from './icons/MicrophoneIcon';
 import WelcomeScreen from './WelcomeScreen';
 import SkeletonLoader from './loaders/SkeletonLoader';
+import TypingIndicator from './loaders/TypingIndicator';
 
 interface ChatInterfaceProps {
   messages: Message[];
   isLoading: boolean;
+  isStreaming: boolean;
   onSendMessage: (inputText: string, imageFile: File | null) => void;
   language: LanguageCode;
   isNewChat: boolean;
@@ -51,6 +53,7 @@ interface ChatInterfaceProps {
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
   messages,
   isLoading,
+  isStreaming,
   onSendMessage,
   language,
   isNewChat,
@@ -67,7 +70,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isStreaming]);
 
   useEffect(() => {
     if (imageFile) {
@@ -195,6 +198,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <MessageBubble key={msg.id} message={msg} language={language} />
             ))}
             {isLoading && <SkeletonLoader />}
+            {isStreaming && !isLoading && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </div>
         )}

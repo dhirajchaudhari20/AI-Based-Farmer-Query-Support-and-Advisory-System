@@ -13,6 +13,7 @@ const THEME_KEY = 'kissanMitraTheme';
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [language, setLanguage] = useState<LanguageCode>('ml');
   const [context, setContext] = useState({
     location: KERALA_DISTRICTS[0],
@@ -127,10 +128,12 @@ const App: React.FC = () => {
     });
 
     setIsLoading(true);
+    setIsStreaming(false);
 
     try {
       const stream = await getAIResponse(inputText, imageFile, context, language);
-      setIsLoading(false); // Stop "Thinking..." bubble as stream starts
+      setIsLoading(false);
+      setIsStreaming(true);
 
       const modelMessageId = `model-${Date.now()}`;
       const initialModelMessage: Message = {
@@ -152,7 +155,6 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error(error);
-      setIsLoading(false); // Ensure loading is off on error
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'model',
@@ -160,6 +162,9 @@ const App: React.FC = () => {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+      setIsStreaming(false);
     }
   }, [context, language]);
 
@@ -203,6 +208,7 @@ const App: React.FC = () => {
         <ChatInterface
           messages={messages}
           isLoading={isLoading}
+          isStreaming={isStreaming}
           onSendMessage={handleSendMessage}
           language={language}
           isNewChat={isNewChat}

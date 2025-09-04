@@ -8,15 +8,14 @@ import SpeakerIcon from './icons/SpeakerIcon';
 import StopIcon from './icons/StopIcon';
 import CopyIcon from './icons/CopyIcon';
 import CheckIcon from './icons/CheckIcon';
-import { Remarkable } from 'remarkable';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { TRANSLATIONS, LANGUAGES } from '../constants';
 
 interface MessageBubbleProps {
   message: Message;
   language: LanguageCode;
 }
-
-const md = new Remarkable();
 
 // A simple animation component to wrap the message bubble
 const AnimatedBubble: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -37,6 +36,7 @@ const AnimatedBubble: React.FC<{ children: React.ReactNode }> = ({ children }) =
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [showFeedbackConfirmation, setShowFeedbackConfirmation] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [isVoiceAvailable, setIsVoiceAvailable] = useState(false);
@@ -147,6 +147,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   const handleFeedback = (type: 'up' | 'down') => {
     setFeedback(type);
     setFeedbackSent(true);
+    setShowFeedbackConfirmation(true);
+    setTimeout(() => {
+      setShowFeedbackConfirmation(false);
+    }, 2000);
   };
   
   // Generates the appropriate title/tooltip for the speaker button.
@@ -167,10 +171,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   const containerClasses = isUser ? 'justify-end' : 'justify-start';
   const bubbleAlignment = isUser ? 'rounded-br-none' : 'rounded-bl-none';
 
-  const renderMarkdown = (text: string) => {
-    return { __html: md.render(text) };
-  };
-
   return (
     <AnimatedBubble>
       <div className={`flex items-start ${containerClasses} group`}>
@@ -190,7 +190,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
             />
           )}
           {message.text && (
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2" dangerouslySetInnerHTML={renderMarkdown(message.text)} />
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+              </div>
           )}
         </div>
           {isUser && (
@@ -219,22 +221,35 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
                    >
                       {copied ? <CheckIcon /> : <CopyIcon />}
                   </button>
-                  <button 
-                    onClick={() => handleFeedback('up')} 
-                    disabled={feedbackSent}
-                    title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
-                    aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
-                    className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'up' ? 'text-green-500 bg-green-100 dark:bg-green-900/50' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300'}`}>
-                      <ThumbsUpIcon solid={feedback === 'up'} />
-                  </button>
-                   <button 
-                      onClick={() => handleFeedback('down')} 
-                      disabled={feedbackSent}
-                      title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
-                      aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
-                      className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'down' ? 'text-red-500 bg-red-100 dark:bg-red-900/50' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300'}`}>
-                      <ThumbsDownIcon solid={feedback === 'down'} />
-                  </button>
+
+                  {showFeedbackConfirmation ? (
+                    <div 
+                      className="p-1 text-xs text-gray-500 dark:text-gray-400"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {TRANSLATIONS.feedbackSent[language]}
+                    </div>
+                  ) : (
+                    <>
+                      <button 
+                        onClick={() => handleFeedback('up')} 
+                        disabled={feedbackSent}
+                        title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
+                        aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
+                        className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'up' ? 'text-green-500 bg-green-100 dark:bg-green-900/50' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300'}`}>
+                          <ThumbsUpIcon solid={feedback === 'up'} />
+                      </button>
+                       <button 
+                          onClick={() => handleFeedback('down')} 
+                          disabled={feedbackSent}
+                          title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
+                          aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
+                          className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'down' ? 'text-red-500 bg-red-100 dark:bg-red-900/50' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300'}`}>
+                          <ThumbsDownIcon solid={feedback === 'down'} />
+                      </button>
+                    </>
+                  )}
               </div>
           )}
       </div>
