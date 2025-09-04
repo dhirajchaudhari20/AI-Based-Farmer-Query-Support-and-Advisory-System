@@ -63,6 +63,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,6 +77,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     setImagePreview(null);
   }, [imageFile]);
+  
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto'; // Reset height
+      const scrollHeight = textarea.scrollHeight;
+      // Set the height, capped at a maximum value (e.g., 150px)
+      textarea.style.height = `${Math.min(scrollHeight, 150)}px`;
+    }
+  }, [inputText]);
 
   // Setup Speech Recognition
   useEffect(() => {
@@ -173,7 +185,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white/60 backdrop-blur-xl rounded-2xl shadow-lg overflow-hidden border border-slate-200/60">
+    <div className="flex-1 flex flex-col bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl shadow-lg overflow-hidden border border-slate-200/60 dark:border-gray-700/60">
       <div className="flex-1 p-4 overflow-y-auto">
         {isNewChat ? (
           <WelcomeScreen onPromptClick={handlePromptClick} language={language} />
@@ -188,7 +200,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
       </div>
 
-      <div className="p-4 bg-white/70 backdrop-blur-sm border-t border-slate-200/80">
+      <div className="p-4 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm border-t border-slate-200/80 dark:border-gray-700/80">
         {imagePreview && (
           <div className="relative w-20 h-20 mb-2">
             <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-lg shadow-sm" />
@@ -202,8 +214,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </button>
           </div>
         )}
-        <div className="relative flex items-center bg-gray-800 rounded-full p-2 shadow-inner transition-shadow duration-300 focus-within:shadow-[0_0_15px_rgba(34,197,94,0.5)]">
-          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-400 hover:text-white p-2 rounded-full transition-colors">
+        <div className="relative flex items-center bg-gray-800 dark:bg-gray-900 rounded-full p-2 shadow-inner transition-shadow duration-300 focus-within:shadow-[0_0_15px_rgba(34,197,94,0.5)]">
+          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-400 dark:text-gray-500 hover:text-white p-2 rounded-full transition-colors">
               <AttachmentIcon />
           </button>
           <input
@@ -216,19 +228,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <button 
               onClick={handleMicClick}
               title={isRecording ? TRANSLATIONS.stopRecording[language] : TRANSLATIONS.startRecording[language]}
-              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 hover:text-white'}`}
+              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 dark:text-gray-500 hover:text-white'}`}
           >
               <MicrophoneIcon />
           </button>
 
           <textarea
+            ref={textareaRef}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={TRANSLATIONS.sendMessagePlaceholder[language]}
             className="flex-1 bg-transparent text-white px-4 py-2 border-none resize-none focus:outline-none focus:ring-0 placeholder-gray-500"
             rows={1}
-            style={{ maxHeight: '100px' }}
           />
           
           <button

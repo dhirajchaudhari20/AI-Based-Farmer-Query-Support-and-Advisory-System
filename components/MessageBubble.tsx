@@ -163,7 +163,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   const bubbleClasses = isUser
     ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-md'
     // eslint-disable-next-line max-len
-    : 'bg-white text-gray-800 shadow-md border border-slate-100';
+    : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md border border-slate-100 dark:border-gray-600';
   const containerClasses = isUser ? 'justify-end' : 'justify-start';
   const bubbleAlignment = isUser ? 'rounded-br-none' : 'rounded-bl-none';
 
@@ -190,12 +190,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
             />
           )}
           {message.text && (
-              <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2" dangerouslySetInnerHTML={renderMarkdown(message.text)} />
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2" dangerouslySetInnerHTML={renderMarkdown(message.text)} />
           )}
         </div>
           {isUser && (
               <div className="flex-shrink-0 ml-3">
-                  <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
+                  <div className="h-8 w-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300">
                       <UserIcon />
                   </div>
               </div>
@@ -205,7 +205,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
                    <button 
                       onClick={() => message.text && handleTextToSpeech(message.text, language)} 
                       disabled={!isVoiceAvailable}
-                      className={`p-1.5 rounded-full text-gray-400 transition-colors ${!isVoiceAvailable ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 hover:text-gray-600'} ${isSpeaking ? 'animate-pulse' : ''}`} 
+                      className={`p-1.5 rounded-full text-gray-400 dark:text-gray-500 transition-colors ${!isVoiceAvailable ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300'} ${isSpeaking ? 'animate-pulse' : ''}`} 
                       title={getSpeakerButtonTitle()}
                       aria-label={getSpeakerButtonTitle()}
                    >
@@ -213,7 +213,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
                   </button>
                    <button 
                       onClick={handleCopy} 
-                      className="p-1.5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                      className="p-1.5 rounded-full text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                       title={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
                       aria-label={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
                    >
@@ -224,7 +224,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
                     disabled={feedbackSent}
                     title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
                     aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
-                    className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'up' ? 'text-green-500 bg-green-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
+                    className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'up' ? 'text-green-500 bg-green-100 dark:bg-green-900/50' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300'}`}>
                       <ThumbsUpIcon solid={feedback === 'up'} />
                   </button>
                    <button 
@@ -232,7 +232,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
                       disabled={feedbackSent}
                       title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
                       aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
-                      className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'down' ? 'text-red-500 bg-red-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
+                      className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'down' ? 'text-red-500 bg-red-100 dark:bg-red-900/50' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300'}`}>
                       <ThumbsDownIcon solid={feedback === 'down'} />
                   </button>
               </div>

@@ -14,10 +14,10 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onPromptClick, language }
       <div className="bg-green-500 text-white rounded-full p-4 mb-4 shadow-lg">
         <BotIcon />
       </div>
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+      <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
         {TRANSLATIONS.headerTitle[language]}
       </h2>
-      <p className="text-gray-500 mb-8">
+      <p className="text-gray-500 dark:text-gray-400 mb-8">
         {TRANSLATIONS.welcomeTitle[language]}
       </p>
 
@@ -26,9 +26,9 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onPromptClick, language }
           <button
             key={i}
             onClick={() => onPromptClick(p[language])}
-            className="text-left bg-white border border-slate-200/80 rounded-lg p-4 hover:bg-slate-100/70 hover:shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="text-left bg-white dark:bg-gray-800 border border-slate-200/80 dark:border-gray-700/80 rounded-lg p-4 hover:bg-slate-100/70 dark:hover:bg-gray-700/70 hover:shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500"
           >
-            <p className="font-semibold text-gray-700">{p[language]}</p>
+            <p className="font-semibold text-gray-700 dark:text-gray-300">{p[language]}</p>
           </button>
         ))}
       </div>

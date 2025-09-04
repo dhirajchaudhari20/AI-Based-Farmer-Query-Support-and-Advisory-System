@@ -8,7 +8,7 @@ interface FooterProps {
 
 const Footer: React.FC<FooterProps> = ({ language }) => {
     return (
-        <footer className="text-center p-4 text-xs text-gray-500">
+        <footer className="text-center p-4 text-xs text-gray-500 dark:text-gray-400">
             <p>{TRANSLATIONS.footerText[language]}</p>
         </footer>
     );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Message, LanguageCode } from './types';
+import type { Message, LanguageCode, Theme } from './types';
 import Header from './components/Header';
 import ContextSelector from './components/ContextSelector';
 import ChatInterface from './components/ChatInterface';
@@ -8,6 +8,7 @@ import { getAIResponse } from './services/geminiService';
 import { KERALA_DISTRICTS, COMMON_CROPS, TRANSLATIONS } from './constants';
 
 const CHAT_HISTORY_KEY = 'kissanMitraChatHistory';
+const THEME_KEY = 'kissanMitraTheme';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -17,6 +18,39 @@ const App: React.FC = () => {
     location: KERALA_DISTRICTS[0],
     crop: COMMON_CROPS[0],
   });
+  const [theme, setTheme] = useState<Theme>('light');
+
+  // Effect to manage the theme (dark/light mode)
+  useEffect(() => {
+    // 1. Read theme from localStorage or use system preference
+    const savedTheme = localStorage.getItem(THEME_KEY) as Theme;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    setTheme(initialTheme);
+    
+    // 2. Apply the theme class to the document
+    if (initialTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const handleToggleTheme = () => {
+    setTheme(prevTheme => {
+      const newTheme = prevTheme === 'light' ? 'dark' : 'light';
+      // 3. Save new theme to localStorage
+      localStorage.setItem(THEME_KEY, newTheme);
+      // 4. Update the theme class on the document
+      if (newTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      return newTheme;
+    });
+  };
+
 
   // Load chat history from localStorage on initial mount, or set the initial
   // welcome message if no history is found.
@@ -150,11 +184,13 @@ const App: React.FC = () => {
   const isNewChat = messages.length === 1 && messages[0].id === 'initial-message';
 
   return (
-    <div className="flex flex-col h-screen text-gray-800">
+    <div className="flex flex-col h-screen text-gray-800 dark:text-gray-200">
       <Header 
         language={language} 
         onLanguageChange={handleLanguageChange}
         onNewChat={handleNewChat}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
       <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 overflow-hidden">
         <ContextSelector
