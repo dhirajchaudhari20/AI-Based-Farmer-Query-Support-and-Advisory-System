@@ -60,11 +60,13 @@ interface Translations {
     stopReading: TranslationDict;
     copy: TranslationDict;
     copied: TranslationDict;
-    clearChat: TranslationDict;
-    clearChatConfirmation: TranslationDict;
+    newChat: TranslationDict;
+    newChatConfirmation: TranslationDict;
     feedbackSent: TranslationDict;
     goodResponse: TranslationDict;
     badResponse: TranslationDict;
+    removeImage: TranslationDict;
+    welcomeTitle: TranslationDict;
     promptStarters: { title: TranslationDict; prompts: TranslationDict[] };
 }
 
@@ -149,16 +151,23 @@ export const TRANSLATIONS: Translations = {
     },
     copy: { en: "Copy", ml: "പകർത്തുക", mr: "कॉपी", hi: "कॉपी" },
     copied: { en: "Copied!", ml: "പകർത്തി!", mr: "कॉपी केले!", hi: "कॉपी किया गया!" },
-    clearChat: { en: "Clear Chat", ml: "ചാറ്റ് മായ്‌ക്കുക", mr: "चॅट साफ करा", hi: "चैट साफ़ करें" },
-    clearChatConfirmation: {
-        en: "Are you sure you want to clear the entire chat history? This action cannot be undone.",
-        ml: "നിങ്ങൾക്ക് തീർച്ചയായും മുഴുവൻ ചാറ്റ് ചരിത്രവും മായ്ക്കണോ? ഈ പ്രവർത്തനം പഴയപടിയാക്കാൻ കഴിയില്ല.",
-        mr: "तुम्हाला खात्री आहे का की तुम्हाला संपूर्ण चॅट इतिहास साफ करायचा आहे? ही क्रिया पूर्ववत केली जाऊ शकत नाही.",
-        hi: "क्या आप वाकई पूरी चैट हिस्ट्री साफ़ करना चाहते हैं? यह कार्रवाई पूर्ववत नहीं की जा सकती।",
+    newChat: { en: "New Chat", ml: "പുതിയ ചാറ്റ്", mr: "नवीन चॅट", hi: "नई चैट" },
+    newChatConfirmation: {
+        en: "Are you sure you want to start a new chat? The current conversation will be cleared.",
+        ml: "നിങ്ങൾക്ക് പുതിയൊരു ചാറ്റ് തുടങ്ങണോ? നിലവിലെ സംഭാഷണം മായ്‌ക്കപ്പെടും.",
+        mr: "तुम्हाला खात्री आहे की तुम्हाला नवीन चॅट सुरू करायची आहे? सध्याचे संभाषण साफ केले जाईल.",
+        hi: "क्या आप वाकई एक नई चैट शुरू करना चाहते हैं? वर्तमान बातचीत साफ़ हो जाएगी।",
     },
     feedbackSent: { en: "Feedback sent!", ml: "അഭിപ്രായം അയച്ചു!", mr: "अभिप्राय पाठवला!", hi: "प्रतिक्रिया भेजी गई!" },
     goodResponse: { en: "Good response", ml: "നല്ല പ്രതികരണം", mr: "चांगली प्रतिक्रिया", hi: "अच्छी प्रतिक्रिया" },
     badResponse: { en: "Bad response", ml: "മോശം പ്രതികരണം", mr: "वाईट प्रतिक्रिया", hi: "खराब प्रतिक्रिया" },
+    removeImage: { en: "Remove image", ml: "ചിത്രം നീക്കം ചെയ്യുക", mr: "प्रतिमा काढा", hi: "छवि हटाएँ" },
+    welcomeTitle: {
+        en: "How can I help you today?",
+        ml: "ഇന്ന് ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കും?",
+        mr: "आज मी तुमची कशी मदत करू शकतो?",
+        hi: "आज मैं आपकी कैसे मदद कर सकता हूँ?",
+    },
     promptStarters: {
         title: {
             en: "Or try one of these:",

@@ -30,19 +30,22 @@ declare global {
 }
 
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Message, LanguageCode } from '../types';
 import { TRANSLATIONS } from '../constants';
 import MessageBubble from './MessageBubble';
 import SendIcon from './icons/SendIcon';
 import AttachmentIcon from './icons/AttachmentIcon';
 import MicrophoneIcon from './icons/MicrophoneIcon';
+import WelcomeScreen from './WelcomeScreen';
+import SkeletonLoader from './loaders/SkeletonLoader';
 
 interface ChatInterfaceProps {
   messages: Message[];
   isLoading: boolean;
   onSendMessage: (inputText: string, imageFile: File | null) => void;
   language: LanguageCode;
+  isNewChat: boolean;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -50,6 +53,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   isLoading,
   onSendMessage,
   language,
+  isNewChat,
 }) => {
   const [inputText, setInputText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -165,45 +169,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
   
   const handlePromptClick = (prompt: string) => {
-      setInputText(prompt);
+      onSendMessage(prompt, null);
   }
 
   return (
     <div className="flex-1 flex flex-col bg-white/60 backdrop-blur-xl rounded-2xl shadow-lg overflow-hidden border border-slate-200/60">
-      <div className="flex-1 p-4 overflow-y-auto space-y-4">
-        {messages.map((msg, index) => (
-           <React.Fragment key={msg.id}>
-             <MessageBubble message={msg} language={language} />
-             {index === 0 && messages.length === 1 && (
-                <div className="flex flex-col sm:flex-row gap-2 justify-center pt-4">
-                    <p className="text-sm text-gray-500 self-center">{TRANSLATIONS.promptStarters.title[language]}</p>
-                    <div className="flex flex-wrap gap-2 justify-center">
-                        {TRANSLATIONS.promptStarters.prompts.map((p, i) => (
-                            <button key={i} onClick={() => handlePromptClick(p[language])} className="text-sm bg-slate-50 border border-slate-300/70 rounded-full px-3 py-1 hover:bg-slate-200/70 transition-colors shadow-sm">
-                                {p[language].split(' ').slice(0, 4).join(' ')}...
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-           </React.Fragment>
-        ))}
-        {isLoading && (
-            <div className="flex items-start justify-start mb-4">
-               <div className="bg-white rounded-lg p-3 max-w-lg flex items-center space-x-2 shadow-md border border-slate-100">
-                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
-                   <span className="text-sm text-gray-600">{TRANSLATIONS.thinking[language]}</span>
-               </div>
-           </div>
+      <div className="flex-1 p-4 overflow-y-auto">
+        {isNewChat ? (
+          <WelcomeScreen onPromptClick={handlePromptClick} language={language} />
+        ) : (
+          <div className="space-y-4">
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} language={language} />
+            ))}
+            {isLoading && <SkeletonLoader />}
+            <div ref={messagesEndRef} />
+          </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       <div className="p-4 bg-white/70 backdrop-blur-sm border-t border-slate-200/80">
         {imagePreview && (
-          <div className="relative w-20 h-20 mb-2 group">
+          <div className="relative w-20 h-20 mb-2">
             <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-lg shadow-sm" />
-            <button onClick={removeImage} className="absolute top-0 right-0 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center -mt-1 -mr-1 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={removeImage}
+              className="absolute top-0 right-0 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center -mt-1 -mr-1 text-xs font-bold transition-transform hover:scale-110"
+              title={TRANSLATIONS.removeImage[language]}
+              aria-label={TRANSLATIONS.removeImage[language]}
+            >
               &times;
             </button>
           </div>

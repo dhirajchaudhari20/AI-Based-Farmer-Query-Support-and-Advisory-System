@@ -1,15 +1,15 @@
 import React from 'react';
 import type { LanguageCode } from '../types';
 import { LANGUAGES, TRANSLATIONS } from '../constants';
-import TrashIcon from './icons/TrashIcon';
+import NewChatIcon from './icons/NewChatIcon';
 
 interface HeaderProps {
   language: LanguageCode;
   onLanguageChange: (language: LanguageCode) => void;
-  onClearChat: () => void;
+  onNewChat: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ language, onLanguageChange, onClearChat }) => {
+const Header: React.FC<HeaderProps> = ({ language, onLanguageChange, onNewChat }) => {
   return (
     <header className="sticky top-0 z-10 bg-slate-50/50 backdrop-blur-xl border-b border-slate-200/60 shadow-sm">
       <div className="max-w-4xl mx-auto flex justify-between items-center p-4">
@@ -19,12 +19,12 @@ const Header: React.FC<HeaderProps> = ({ language, onLanguageChange, onClearChat
         </div>
         <div className="flex items-center gap-4">
           <button 
-            onClick={onClearChat} 
-            title={TRANSLATIONS.clearChat[language]} 
+            onClick={onNewChat} 
+            title={TRANSLATIONS.newChat[language]} 
             className="p-2 rounded-full text-gray-500 hover:bg-slate-200/70 hover:text-gray-700 transition-colors"
-            aria-label={TRANSLATIONS.clearChat[language]}
+            aria-label={TRANSLATIONS.newChat[language]}
           >
-            <TrashIcon />
+            <NewChatIcon />
           </button>
           <div className="relative">
             <select

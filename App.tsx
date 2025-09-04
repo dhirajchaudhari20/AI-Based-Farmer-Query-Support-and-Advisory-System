@@ -129,8 +129,8 @@ const App: React.FC = () => {
     }
   }, [context, language]);
 
-  const handleClearChat = () => {
-    if (window.confirm(TRANSLATIONS.clearChatConfirmation[language])) {
+  const handleNewChat = () => {
+    if (window.confirm(TRANSLATIONS.newChatConfirmation[language])) {
         try {
             localStorage.removeItem(CHAT_HISTORY_KEY);
         } catch (error) {
@@ -147,12 +147,14 @@ const App: React.FC = () => {
     }
   };
 
+  const isNewChat = messages.length === 1 && messages[0].id === 'initial-message';
+
   return (
     <div className="flex flex-col h-screen text-gray-800">
       <Header 
         language={language} 
         onLanguageChange={handleLanguageChange}
-        onClearChat={handleClearChat}
+        onNewChat={handleNewChat}
       />
       <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 overflow-hidden">
         <ContextSelector
@@ -167,6 +169,7 @@ const App: React.FC = () => {
           isLoading={isLoading}
           onSendMessage={handleSendMessage}
           language={language}
+          isNewChat={isNewChat}
         />
       </main>
       <Footer language={language} />

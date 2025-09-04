@@ -18,6 +18,22 @@ interface MessageBubbleProps {
 
 const md = new Remarkable();
 
+// A simple animation component to wrap the message bubble
+const AnimatedBubble: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    // Delay visibility to allow CSS transition to take effect on mount
+    const timer = setTimeout(() => setVisible(true), 10);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className={`transition-all duration-500 ease-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+      {children}
+    </div>
+  );
+};
+
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -156,71 +172,73 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   };
 
   return (
-    <div className={`flex items-start ${containerClasses} mb-4 group`}>
-        {!isUser && (
-            <div className="flex-shrink-0 mr-3">
-                <div className="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center text-white shadow-sm">
-                    <BotIcon />
-                </div>
-            </div>
-        )}
-      <div className={`rounded-xl p-3 max-w-xl ${bubbleClasses} ${bubbleAlignment}`}>
-        {message.image && (
-          <img
-            src={message.image}
-            alt="User upload"
-            className="rounded-lg mb-2 max-w-xs max-h-64 object-contain"
-          />
-        )}
-        {message.text && (
-            <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2" dangerouslySetInnerHTML={renderMarkdown(message.text)} />
-        )}
-      </div>
-        {isUser && (
-            <div className="flex-shrink-0 ml-3">
-                <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
-                    <UserIcon />
-                </div>
-            </div>
-        )}
-        {!isUser && message.text && (
-            <div className="self-end ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                 <button 
-                    onClick={() => message.text && handleTextToSpeech(message.text, language)} 
-                    disabled={!isVoiceAvailable}
-                    className={`p-1.5 rounded-full text-gray-400 transition-colors ${!isVoiceAvailable ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 hover:text-gray-600'} ${isSpeaking ? 'animate-pulse' : ''}`} 
-                    title={getSpeakerButtonTitle()}
-                    aria-label={getSpeakerButtonTitle()}
-                 >
-                    {isSpeaking ? <StopIcon /> : <SpeakerIcon />}
-                </button>
-                 <button 
-                    onClick={handleCopy} 
-                    className="p-1.5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
-                    title={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
-                    aria-label={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
-                 >
-                    {copied ? <CheckIcon /> : <CopyIcon />}
-                </button>
-                <button 
-                  onClick={() => handleFeedback('up')} 
-                  disabled={feedbackSent}
-                  title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
-                  aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
-                  className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'up' ? 'text-green-500 bg-green-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
-                    <ThumbsUpIcon solid={feedback === 'up'} />
-                </button>
-                 <button 
-                    onClick={() => handleFeedback('down')} 
+    <AnimatedBubble>
+      <div className={`flex items-start ${containerClasses} group`}>
+          {!isUser && (
+              <div className="flex-shrink-0 mr-3">
+                  <div className="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center text-white shadow-sm">
+                      <BotIcon />
+                  </div>
+              </div>
+          )}
+        <div className={`rounded-xl p-3 max-w-xl ${bubbleClasses} ${bubbleAlignment}`}>
+          {message.image && (
+            <img
+              src={message.image}
+              alt="User upload"
+              className="rounded-lg mb-2 max-w-xs max-h-64 object-contain"
+            />
+          )}
+          {message.text && (
+              <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2" dangerouslySetInnerHTML={renderMarkdown(message.text)} />
+          )}
+        </div>
+          {isUser && (
+              <div className="flex-shrink-0 ml-3">
+                  <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
+                      <UserIcon />
+                  </div>
+              </div>
+          )}
+          {!isUser && message.text && (
+              <div className="self-end ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <button 
+                      onClick={() => message.text && handleTextToSpeech(message.text, language)} 
+                      disabled={!isVoiceAvailable}
+                      className={`p-1.5 rounded-full text-gray-400 transition-colors ${!isVoiceAvailable ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 hover:text-gray-600'} ${isSpeaking ? 'animate-pulse' : ''}`} 
+                      title={getSpeakerButtonTitle()}
+                      aria-label={getSpeakerButtonTitle()}
+                   >
+                      {isSpeaking ? <StopIcon /> : <SpeakerIcon />}
+                  </button>
+                   <button 
+                      onClick={handleCopy} 
+                      className="p-1.5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                      title={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
+                      aria-label={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
+                   >
+                      {copied ? <CheckIcon /> : <CopyIcon />}
+                  </button>
+                  <button 
+                    onClick={() => handleFeedback('up')} 
                     disabled={feedbackSent}
-                    title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
-                    aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
-                    className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'down' ? 'text-red-500 bg-red-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
-                    <ThumbsDownIcon solid={feedback === 'down'} />
-                </button>
-            </div>
-        )}
-    </div>
+                    title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
+                    aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
+                    className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'up' ? 'text-green-500 bg-green-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
+                      <ThumbsUpIcon solid={feedback === 'up'} />
+                  </button>
+                   <button 
+                      onClick={() => handleFeedback('down')} 
+                      disabled={feedbackSent}
+                      title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
+                      aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
+                      className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'down' ? 'text-red-500 bg-red-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
+                      <ThumbsDownIcon solid={feedback === 'down'} />
+                  </button>
+              </div>
+          )}
+      </div>
+    </AnimatedBubble>
   );
 };
 
