@@ -58,6 +58,13 @@ interface Translations {
     stopRecording: TranslationDict;
     readAloud: TranslationDict;
     stopReading: TranslationDict;
+    copy: TranslationDict;
+    copied: TranslationDict;
+    clearChat: TranslationDict;
+    clearChatConfirmation: TranslationDict;
+    feedbackSent: TranslationDict;
+    goodResponse: TranslationDict;
+    badResponse: TranslationDict;
     promptStarters: { title: TranslationDict; prompts: TranslationDict[] };
 }
 
@@ -140,6 +147,18 @@ export const TRANSLATIONS: Translations = {
         mr: "वाचणे थांबवा",
         hi: "पढ़ना बंद करो",
     },
+    copy: { en: "Copy", ml: "പകർത്തുക", mr: "कॉपी", hi: "कॉपी" },
+    copied: { en: "Copied!", ml: "പകർത്തി!", mr: "कॉपी केले!", hi: "कॉपी किया गया!" },
+    clearChat: { en: "Clear Chat", ml: "ചാറ്റ് മായ്‌ക്കുക", mr: "चॅट साफ करा", hi: "चैट साफ़ करें" },
+    clearChatConfirmation: {
+        en: "Are you sure you want to clear the entire chat history? This action cannot be undone.",
+        ml: "നിങ്ങൾക്ക് തീർച്ചയായും മുഴുവൻ ചാറ്റ് ചരിത്രവും മായ്ക്കണോ? ഈ പ്രവർത്തനം പഴയപടിയാക്കാൻ കഴിയില്ല.",
+        mr: "तुम्हाला खात्री आहे का की तुम्हाला संपूर्ण चॅट इतिहास साफ करायचा आहे? ही क्रिया पूर्ववत केली जाऊ शकत नाही.",
+        hi: "क्या आप वाकई पूरी चैट हिस्ट्री साफ़ करना चाहते हैं? यह कार्रवाई पूर्ववत नहीं की जा सकती।",
+    },
+    feedbackSent: { en: "Feedback sent!", ml: "അഭിപ്രായം അയച്ചു!", mr: "अभिप्राय पाठवला!", hi: "प्रतिक्रिया भेजी गई!" },
+    goodResponse: { en: "Good response", ml: "നല്ല പ്രതികരണം", mr: "चांगली प्रतिक्रिया", hi: "अच्छी प्रतिक्रिया" },
+    badResponse: { en: "Bad response", ml: "മോശം പ്രതികരണം", mr: "वाईट प्रतिक्रिया", hi: "खराब प्रतिक्रिया" },
     promptStarters: {
         title: {
             en: "Or try one of these:",

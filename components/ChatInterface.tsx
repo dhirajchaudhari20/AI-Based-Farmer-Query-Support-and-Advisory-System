@@ -89,14 +89,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = '';
       let interimTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
+
+      for (let i = 0; i < event.results.length; i++) {
+        const transcriptChunk = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          finalTranscript += transcriptChunk;
         } else {
-          interimTranscript += event.results[i][0].transcript;
+          interimTranscript += transcriptChunk;
         }
       }
-      setInputText(prev => prev + finalTranscript);
+      setInputText(finalTranscript + interimTranscript);
     };
 
     recognition.onend = () => {

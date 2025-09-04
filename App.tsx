@@ -129,11 +129,30 @@ const App: React.FC = () => {
     }
   }, [context, language]);
 
+  const handleClearChat = () => {
+    if (window.confirm(TRANSLATIONS.clearChatConfirmation[language])) {
+        try {
+            localStorage.removeItem(CHAT_HISTORY_KEY);
+        } catch (error) {
+            console.error("Failed to clear chat history:", error);
+        }
+        setMessages([
+            {
+                id: 'initial-message',
+                role: 'model',
+                text: TRANSLATIONS.initialMessage[language],
+                timestamp: new Date(),
+            },
+        ]);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen text-gray-800">
       <Header 
         language={language} 
-        onLanguageChange={handleLanguageChange} 
+        onLanguageChange={handleLanguageChange}
+        onClearChat={handleClearChat}
       />
       <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 overflow-hidden">
         <ContextSelector

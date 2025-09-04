@@ -6,6 +6,8 @@ import ThumbsUpIcon from './icons/ThumbsUpIcon';
 import ThumbsDownIcon from './icons/ThumbsDownIcon';
 import SpeakerIcon from './icons/SpeakerIcon';
 import StopIcon from './icons/StopIcon';
+import CopyIcon from './icons/CopyIcon';
+import CheckIcon from './icons/CheckIcon';
 import { Remarkable } from 'remarkable';
 import { TRANSLATIONS, LANGUAGES } from '../constants';
 
@@ -18,9 +20,11 @@ const md = new Remarkable();
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [isVoiceAvailable, setIsVoiceAvailable] = useState(false);
+  const [copied, setCopied] = useState(false);
   const utteranceQueue = useRef<SpeechSynthesisUtterance[]>([]);
 
   // This effect manages loading browser voices and checking if a voice for the
@@ -30,9 +34,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
       const availableVoices = window.speechSynthesis.getVoices();
       if (availableVoices.length > 0) {
         setVoices(availableVoices);
-        const languageCodeForVoice = language === 'ml' ? 'ml-IN' : language === 'hi' ? 'hi-IN' : language === 'mr' ? 'mr-IN' : 'en-US';
-        // Check if any installed voice matches the language code (e.g., 'ml-IN')
-        const hasVoice = availableVoices.some(v => v.lang === languageCodeForVoice);
+        // Check if any installed voice starts with the desired language code (e.g., 'ml' for 'ml-IN').
+        const hasVoice = availableVoices.some(v => v.lang.startsWith(language));
         setIsVoiceAvailable(hasVoice);
         // Once voices are loaded, we don't need the listener anymore.
         window.speechSynthesis.onvoiceschanged = null;
@@ -81,14 +84,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
     const chunks = text.match(/.{1,180}(\s|\.|\?|!|$)/g) || [];
     if (chunks.length === 0) return;
 
-    const languageCodeForVoice = lang === 'ml' ? 'ml-IN' : lang === 'hi' ? 'hi-IN' : lang === 'mr' ? 'mr-IN' : 'en-US';
-    const filteredVoices = voices.filter(voice => voice.lang === languageCodeForVoice);
+    // Dynamically find voices that match the base language code (e.g., 'ml' matches 'ml-IN').
+    const matchingVoices = voices.filter(voice => voice.lang.startsWith(lang));
+    if (matchingVoices.length === 0) return; // Safeguard
     
-    // Prioritize higher-quality voices
+    // Prioritize higher-quality voices from the matching set.
     const selectedVoice = 
-        filteredVoices.find(v => v.name.includes('Google')) ||
-        filteredVoices.find(v => v.localService) ||
-        filteredVoices[0];
+        matchingVoices.find(v => v.name.includes('Google')) || // Prefer Google voices
+        matchingVoices.find(v => v.localService) || // Then local system voices
+        matchingVoices[0]; // Fallback to the first available voice for that language.
     
     if (!selectedVoice) return; // Safeguard, should be prevented by isVoiceAvailable check.
 
@@ -99,7 +103,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
       utterance.voice = selectedVoice;
       utterance.onend = speakNextInQueue; // When one ends, the next one starts.
       utterance.onerror = (event) => {
-        console.error("SpeechSynthesis Error:", event.error);
+        // The 'interrupted' error is expected when another speech request starts.
+        // We handle it gracefully by resetting state without logging a console error.
+        if (event.error !== 'interrupted') {
+          console.error("SpeechSynthesis Error:", event.error);
+        }
         utteranceQueue.current = []; // Clear queue on error
         window.speechSynthesis.cancel();
         setIsSpeaking(false);
@@ -110,9 +118,23 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
     setIsSpeaking(true);
     speakNextInQueue(); // Start speaking the first item in the queue.
   };
+
+  const handleCopy = () => {
+    if (navigator.clipboard && message.text) {
+      navigator.clipboard.writeText(message.text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
+      });
+    }
+  };
+
+  const handleFeedback = (type: 'up' | 'down') => {
+    setFeedback(type);
+    setFeedbackSent(true);
+  };
   
   // Generates the appropriate title/tooltip for the speaker button.
-  const getButtonTitle = () => {
+  const getSpeakerButtonTitle = () => {
       if (!isVoiceAvailable) {
           const langName = LANGUAGES.find(l => l.code === language)?.name || language;
           return `A voice for ${langName} is not available in this browser.`;
@@ -124,6 +146,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   
   const bubbleClasses = isUser
     ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-md'
+    // eslint-disable-next-line max-len
     : 'bg-white text-gray-800 shadow-md border border-slate-100';
   const containerClasses = isUser ? 'justify-end' : 'justify-start';
   const bubbleAlignment = isUser ? 'rounded-br-none' : 'rounded-bl-none';
@@ -165,15 +188,34 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
                  <button 
                     onClick={() => message.text && handleTextToSpeech(message.text, language)} 
                     disabled={!isVoiceAvailable}
-                    className={`p-1 rounded-full text-gray-400 transition-colors ${!isVoiceAvailable ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 hover:text-gray-600'} ${isSpeaking ? 'animate-pulse' : ''}`} 
-                    title={getButtonTitle()}
+                    className={`p-1.5 rounded-full text-gray-400 transition-colors ${!isVoiceAvailable ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-200 hover:text-gray-600'} ${isSpeaking ? 'animate-pulse' : ''}`} 
+                    title={getSpeakerButtonTitle()}
+                    aria-label={getSpeakerButtonTitle()}
                  >
                     {isSpeaking ? <StopIcon /> : <SpeakerIcon />}
                 </button>
-                <button onClick={() => setFeedback('up')} className={`p-1 rounded-full ${feedback === 'up' ? 'text-green-500 bg-green-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
+                 <button 
+                    onClick={handleCopy} 
+                    className="p-1.5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                    title={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
+                    aria-label={copied ? TRANSLATIONS.copied[language] : TRANSLATIONS.copy[language]}
+                 >
+                    {copied ? <CheckIcon /> : <CopyIcon />}
+                </button>
+                <button 
+                  onClick={() => handleFeedback('up')} 
+                  disabled={feedbackSent}
+                  title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
+                  aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.goodResponse[language]}
+                  className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'up' ? 'text-green-500 bg-green-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
                     <ThumbsUpIcon solid={feedback === 'up'} />
                 </button>
-                 <button onClick={() => setFeedback('down')} className={`p-1 rounded-full ${feedback === 'down' ? 'text-red-500 bg-red-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
+                 <button 
+                    onClick={() => handleFeedback('down')} 
+                    disabled={feedbackSent}
+                    title={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
+                    aria-label={feedbackSent ? TRANSLATIONS.feedbackSent[language] : TRANSLATIONS.badResponse[language]}
+                    className={`p-1 rounded-full disabled:cursor-not-allowed ${feedback === 'down' ? 'text-red-500 bg-red-100' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'}`}>
                     <ThumbsDownIcon solid={feedback === 'down'} />
                 </button>
             </div>
