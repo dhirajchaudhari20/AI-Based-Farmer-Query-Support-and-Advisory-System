@@ -1,7 +1,7 @@
 import React from 'react';
 import type { LanguageCode } from '../types';
 import { TRANSLATIONS } from '../constants';
-import BotIcon from './icons/BotIcon';
+import LogoIcon from './icons/LogoIcon';
 
 interface WelcomeScreenProps {
   onPromptClick: (prompt: string) => void;
@@ -11,8 +11,8 @@ interface WelcomeScreenProps {
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onPromptClick, language }) => {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <div className="bg-green-500 text-white rounded-full p-4 mb-4 shadow-lg">
-        <BotIcon />
+      <div className="bg-green-500 text-white rounded-full p-3 mb-4 shadow-lg">
+        <LogoIcon className="h-10 w-10 text-white" />
       </div>
       <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
         {TRANSLATIONS.headerTitle[language]}

@@ -4,6 +4,7 @@ import { LANGUAGES, TRANSLATIONS } from '../constants';
 import NewChatIcon from './icons/NewChatIcon';
 import SunIcon from './icons/SunIcon';
 import MoonIcon from './icons/MoonIcon';
+import LogoIcon from './icons/LogoIcon';
 
 interface HeaderProps {
   language: LanguageCode;
@@ -17,9 +18,12 @@ const Header: React.FC<HeaderProps> = ({ language, onLanguageChange, onNewChat, 
   return (
     <header className="sticky top-0 z-10 bg-slate-50/50 dark:bg-gray-800/50 backdrop-blur-xl border-b border-slate-200/60 dark:border-gray-700/60 shadow-sm">
       <div className="max-w-4xl mx-auto flex justify-between items-center p-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">{TRANSLATIONS.headerTitle[language]}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{TRANSLATIONS.headerSubtitle[language]}</p>
+        <div className="flex items-center gap-3">
+          <LogoIcon />
+          <div>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">{TRANSLATIONS.headerTitle[language]}</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{TRANSLATIONS.headerSubtitle[language]}</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <button
