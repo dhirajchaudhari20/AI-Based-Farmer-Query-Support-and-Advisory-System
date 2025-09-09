@@ -19,6 +19,7 @@ interface ChatInterfaceProps {
   onSendMessage: (inputText: string, imageFile: File | null) => void;
   language: LanguageCode;
   isNewChat: boolean;
+  isOnline: boolean;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -28,6 +29,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onSendMessage,
   language,
   isNewChat,
+  isOnline,
 }) => {
   const [inputText, setInputText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -111,6 +113,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
 
   const handleMicClick = () => {
+    if (!isOnline) return; // Disable mic when offline
     if (isRecording) {
       recognitionRef.current?.stop();
     } else {
@@ -165,6 +168,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setIsLiveModalOpen(false);
   };
 
+  const canSendMessage = (!!inputText.trim() || !!imageFile) && !isLoading;
+
   return (
     <div className="flex-1 flex flex-col bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl shadow-lg overflow-hidden border border-slate-200/60 dark:border-gray-700/60">
       <div className="flex-1 p-4 overflow-y-auto">
@@ -197,7 +202,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         )}
         <div className="relative flex items-center bg-gray-800 dark:bg-gray-900 rounded-full p-2 shadow-inner transition-shadow duration-300 focus-within:shadow-[0_0_15px_rgba(34,197,94,0.5)]">
-          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-400 dark:text-gray-500 hover:text-white p-2 rounded-full transition-colors">
+          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-400 dark:text-gray-500 hover:text-white p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline}>
               <AttachmentIcon />
           </button>
           <input
@@ -206,11 +211,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onChange={handleFileChange}
             className="hidden"
             accept="image/*"
+            disabled={!isOnline}
           />
           <button 
               onClick={handleMicClick}
               title={isRecording ? TRANSLATIONS.stopRecording[language] : TRANSLATIONS.startRecording[language]}
-              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 dark:text-gray-500 hover:text-white'}`}
+              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 dark:text-gray-500 hover:text-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              disabled={!isOnline}
           >
               <MicrophoneIcon />
           </button>
@@ -218,7 +225,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               onClick={() => setIsLiveModalOpen(true)}
               title="Live Analysis"
               aria-label="Live Analysis"
-              className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:text-white transition-colors"
+              className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!isOnline}
           >
               <VideoCameraIcon />
           </button>
@@ -228,15 +236,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={TRANSLATIONS.sendMessagePlaceholder[language]}
+            placeholder={isOnline ? TRANSLATIONS.sendMessagePlaceholder[language] : "You are offline. Type a message to send later."}
             className="flex-1 bg-transparent text-white px-4 py-2 border-none resize-none focus:outline-none focus:ring-0 placeholder-gray-500"
             rows={1}
           />
           
           <button
             onClick={handleSend}
-            disabled={isLoading || (!inputText.trim() && !imageFile)}
-            className="bg-green-500 text-white w-10 h-10 flex items-center justify-center rounded-full hover:bg-green-600 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
+            disabled={!canSendMessage}
+            className="bg-green-500 text-white w-10 h-10 flex items-center justify-center rounded-xl hover:bg-green-600 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
             aria-label="Send message"
           >
             <SendIcon />

@@ -8,6 +8,7 @@ import SpeakerIcon from './icons/SpeakerIcon';
 import StopIcon from './icons/StopIcon';
 import CopyIcon from './icons/CopyIcon';
 import CheckIcon from './icons/CheckIcon';
+import ShareIcon from './icons/ShareIcon'; // Import the new icon
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { TRANSLATIONS, LANGUAGES } from '../constants';
@@ -144,6 +145,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
     }
   };
 
+  const handleShare = async () => {
+    const shareData = {
+      title: 'Kissan Mitra Advice',
+      text: message.text,
+    };
+    if (navigator.share && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (error) {
+        console.error('Error sharing:', error);
+      }
+    } else {
+      // Fallback for browsers that don't support the Share API
+      handleCopy();
+      alert('Content copied to clipboard. You can now paste it to share.');
+    }
+  };
+
   const handleFeedback = (type: 'up' | 'down') => {
     setFeedback(type);
     setFeedbackSent(true);
@@ -204,6 +223,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
           )}
           {!isUser && message.text && (
               <div className="self-end ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <button 
+                      onClick={handleShare}
+                      className="p-1.5 rounded-full text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                      title="Share advice"
+                      aria-label="Share advice"
+                   >
+                     <ShareIcon />
+                   </button>
                    <button 
                       onClick={() => message.text && handleTextToSpeech(message.text, language)} 
                       disabled={!isVoiceAvailable}

@@ -1,3 +1,5 @@
+
+
 export type Role = 'user' | 'model';
 
 export type LanguageCode = 'en' | 'ml' | 'mr' | 'hi';
@@ -16,6 +18,22 @@ export interface Message {
   image?: string; // URL for displaying the image
   timestamp: Date;
 }
+
+// Represents the full chat session stored in the database
+export interface ChatSession {
+  id: string;
+  title: string;
+  timestamp: Date;
+  messages: Message[];
+}
+
+// Represents the lightweight chat metadata for display in the sidebar
+export interface ChatMetadata {
+  id: string;
+  title: string;
+  timestamp: Date;
+}
+
 
 // Fix: Add TypeScript definitions for the Web Speech API to be used across the app.
 export interface SpeechRecognitionEvent extends Event {

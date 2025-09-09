@@ -1,24 +1,27 @@
 import React from 'react';
 import type { LanguageCode, Theme } from '../types';
 import { LANGUAGES, TRANSLATIONS } from '../constants';
-import NewChatIcon from './icons/NewChatIcon';
 import SunIcon from './icons/SunIcon';
 import MoonIcon from './icons/MoonIcon';
 import LogoIcon from './icons/LogoIcon';
+import MenuIcon from './icons/MenuIcon';
 
 interface HeaderProps {
   language: LanguageCode;
   onLanguageChange: (language: LanguageCode) => void;
-  onNewChat: () => void;
   theme: Theme;
   onToggleTheme: () => void;
+  onToggleSidebar: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ language, onLanguageChange, onNewChat, theme, onToggleTheme }) => {
+const Header: React.FC<HeaderProps> = ({ language, onLanguageChange, theme, onToggleTheme, onToggleSidebar }) => {
   return (
     <header className="sticky top-0 z-10 bg-slate-50/50 dark:bg-gray-800/50 backdrop-blur-xl border-b border-slate-200/60 dark:border-gray-700/60 shadow-sm">
       <div className="max-w-4xl mx-auto flex justify-between items-center p-4">
         <div className="flex items-center gap-3">
+          <button onClick={onToggleSidebar} className="md:hidden p-2 -ml-2 text-gray-500 dark:text-gray-400">
+            <MenuIcon />
+          </button>
           <LogoIcon />
           <div>
             <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">{TRANSLATIONS.headerTitle[language]}</h1>
@@ -33,14 +36,6 @@ const Header: React.FC<HeaderProps> = ({ language, onLanguageChange, onNewChat, 
               aria-label="Toggle theme"
             >
               {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-          </button>
-          <button 
-            onClick={onNewChat} 
-            title={TRANSLATIONS.newChat[language]} 
-            className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-slate-200/70 dark:hover:bg-gray-700/70 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-            aria-label={TRANSLATIONS.newChat[language]}
-          >
-            <NewChatIcon />
           </button>
           <div className="relative">
             <select

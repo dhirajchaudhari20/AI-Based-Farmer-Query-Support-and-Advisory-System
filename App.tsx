@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Message, LanguageCode, Theme } from './types';
+import type { Message, LanguageCode, Theme, ChatMetadata } from './types';
 import Header from './components/Header';
 import ContextSelector from './components/ContextSelector';
 import ChatInterface from './components/ChatInterface';
 import Footer from './components/Footer';
+import Sidebar from './components/Sidebar';
 import { getAIResponse } from './services/geminiService';
+import { databaseService } from './services/databaseService';
 import { KERALA_DISTRICTS, COMMON_CROPS, TRANSLATIONS } from './constants';
+import { offlineService } from './services/offlineService';
 
-const CHAT_HISTORY_KEY = 'kissanMitraChatHistory';
 const THEME_KEY = 'kissanMitraTheme';
 
 const App: React.FC = () => {
@@ -19,95 +21,90 @@ const App: React.FC = () => {
     location: KERALA_DISTRICTS[0],
     crop: COMMON_CROPS[0],
   });
-  const [theme, setTheme] = useState<Theme>('light');
-
-  // Effect to manage the theme (dark/light mode)
-  useEffect(() => {
-    // 1. Read theme from localStorage or use system preference
-    const savedTheme = localStorage.getItem(THEME_KEY) as Theme;
+  // Fix: Lazily initialize theme with validation for robustness.
+  const [theme, setTheme] = useState<Theme>(() => {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    // Ensure the saved value is a valid theme before using it.
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      return savedTheme;
+    }
+    // Fallback to system preference if no valid theme is saved.
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
-    setTheme(initialTheme);
-    
-    // 2. Apply the theme class to the document
-    if (initialTheme === 'dark') {
+    return prefersDark ? 'dark' : 'light';
+  });
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  
+  // New state for multi-chat database feature
+  const [chats, setChats] = useState<ChatMetadata[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+
+
+  // Effect to manage online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      offlineService.syncQueue(handleSendMessage);
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (isOnline) {
+      offlineService.syncQueue(handleSendMessage);
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []); 
+
+
+  // Effect to apply theme changes to the DOM and localStorage.
+  useEffect(() => {
+    if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, []);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
+  // Simplified theme toggle handler.
   const handleToggleTheme = () => {
-    setTheme(prevTheme => {
-      const newTheme = prevTheme === 'light' ? 'dark' : 'light';
-      // 3. Save new theme to localStorage
-      localStorage.setItem(THEME_KEY, newTheme);
-      // 4. Update the theme class on the document
-      if (newTheme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-      return newTheme;
-    });
+    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
+  const loadChats = async () => {
+      const chatList = await databaseService.getAllChatMetadata();
+      setChats(chatList);
+  };
 
-  // Load chat history from localStorage on initial mount, or set the initial
-  // welcome message if no history is found.
+  // Load chat history from IndexedDB on initial mount
   useEffect(() => {
-    try {
-      const savedHistory = localStorage.getItem(CHAT_HISTORY_KEY);
-      if (savedHistory) {
-        const parsedMessages: Message[] = JSON.parse(savedHistory).map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp), // Re-hydrate Date objects from strings
-        }));
-        if (parsedMessages.length > 0) {
-            setMessages(parsedMessages);
-            return; // Exit if history is successfully loaded
-        }
+    loadChats();
+    // Start with a new chat session if none is active
+    handleNewChat();
+  }, []);
+
+  // Set the initial welcome message when starting a new chat
+  useEffect(() => {
+      if (activeChatId === null) {
+          setMessages([
+              {
+                  id: 'initial-message',
+                  role: 'model',
+                  text: TRANSLATIONS.initialMessage[language],
+                  timestamp: new Date(),
+              },
+          ]);
       }
-    } catch (error) {
-      console.error("Failed to load chat history:", error);
-      localStorage.removeItem(CHAT_HISTORY_KEY); // Clear potentially corrupted data
-    }
-
-    // This part runs only if no valid history was found.
-    setMessages([
-      {
-        id: 'initial-message',
-        role: 'model',
-        text: TRANSLATIONS.initialMessage[language],
-        timestamp: new Date(),
-      },
-    ]);
-  }, []); // Empty dependency array ensures this runs only once on mount
-
-  // Save chat history to localStorage whenever the messages array changes.
-  useEffect(() => {
-    // We only save if it's a real conversation, not the initial placeholder message.
-    if (messages.length > 1 || (messages.length === 1 && messages[0].id !== 'initial-message')) {
-        try {
-            localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
-        } catch (error) {
-            console.error("Failed to save chat history:", error);
-        }
-    }
-  }, [messages]);
+  }, [activeChatId, language]);
 
   const handleLanguageChange = (newLanguage: LanguageCode) => {
     setLanguage(newLanguage);
-    // If the only message is the initial placeholder, update its text to the new language.
-    setMessages(prev => {
-        if (prev.length === 1 && prev[0].id === 'initial-message') {
-            return [{
-                ...prev[0],
-                text: TRANSLATIONS.initialMessage[newLanguage],
-            }];
-        }
-        return prev;
-    });
   };
 
   const handleSendMessage = useCallback(async (inputText: string, imageFile: File | null) => {
@@ -121,14 +118,29 @@ const App: React.FC = () => {
       timestamp: new Date(),
     };
     
-    // Replace the initial message with the first user message to start the conversation.
-    setMessages((prevMessages) => {
-        const isInitialState = prevMessages.length === 1 && prevMessages[0].id === 'initial-message';
-        return isInitialState ? [userMessage] : [...prevMessages, userMessage];
-    });
+    const updatedMessages = activeChatId === null ? [userMessage] : [...messages, userMessage];
+    setMessages(updatedMessages);
+
+    if (!navigator.onLine) {
+        await offlineService.addToQueue(inputText, imageFile);
+        return;
+    }
 
     setIsLoading(true);
     setIsStreaming(false);
+
+    let currentChatId = activeChatId;
+
+    // If this is the first message of a new chat, create the chat session in the DB
+    if (currentChatId === null) {
+        const newChatId = `chat-${Date.now()}`;
+        const title = inputText.split(' ').slice(0, 5).join(' ') || 'New Chat';
+        await databaseService.addOrUpdateChat({ id: newChatId, title, timestamp: new Date(), messages: [userMessage] });
+        setActiveChatId(newChatId);
+        currentChatId = newChatId;
+        // Refresh sidebar
+        loadChats(); 
+    }
 
     try {
       const stream = await getAIResponse(inputText, imageFile, context, language);
@@ -139,7 +151,7 @@ const App: React.FC = () => {
       const initialModelMessage: Message = {
         id: modelMessageId,
         role: 'model',
-        text: '', // Start with empty text for streaming
+        text: '',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, initialModelMessage]);
@@ -153,6 +165,16 @@ const App: React.FC = () => {
           )
         );
       }
+       
+      // After streaming is complete, save the final state to the database
+      const finalModelMessage = { ...initialModelMessage, text: aggregatedText };
+      const finalMessages = [...updatedMessages, finalModelMessage];
+      const chatToSave = await databaseService.getChat(currentChatId!);
+      if(chatToSave){
+          chatToSave.messages = finalMessages;
+          await databaseService.addOrUpdateChat(chatToSave);
+      }
+
     } catch (error) {
       console.error(error);
       const errorMessage: Message = {
@@ -166,55 +188,83 @@ const App: React.FC = () => {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [context, language]);
+  }, [context, language, messages, activeChatId]);
 
   const handleNewChat = () => {
-    if (window.confirm(TRANSLATIONS.newChatConfirmation[language])) {
-        try {
-            localStorage.removeItem(CHAT_HISTORY_KEY);
-        } catch (error) {
-            console.error("Failed to clear chat history:", error);
-        }
-        setMessages([
-            {
-                id: 'initial-message',
-                role: 'model',
-                text: TRANSLATIONS.initialMessage[language],
-                timestamp: new Date(),
-            },
-        ]);
+    setActiveChatId(null);
+    setMessages([]); // Will be populated by useEffect
+    if (window.innerWidth <= 768) {
+        setIsSidebarOpen(false);
     }
   };
 
-  const isNewChat = messages.length === 1 && messages[0].id === 'initial-message';
+  const handleSelectChat = async (id: string) => {
+      const chat = await databaseService.getChat(id);
+      if (chat) {
+          setActiveChatId(chat.id);
+          setMessages(chat.messages);
+      }
+      if (window.innerWidth <= 768) {
+          setIsSidebarOpen(false);
+      }
+  };
+
+  const handleDeleteChat = async (id: string) => {
+      if (window.confirm("Are you sure you want to delete this chat?")) {
+          await databaseService.deleteChat(id);
+          if (activeChatId === id) {
+              handleNewChat();
+          }
+          loadChats();
+      }
+  };
+  
+  const isNewChat = activeChatId === null;
 
   return (
-    <div className="flex flex-col h-screen text-gray-800 dark:text-gray-200">
-      <Header 
-        language={language} 
-        onLanguageChange={handleLanguageChange}
-        onNewChat={handleNewChat}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
+    <div className="flex h-screen text-gray-800 dark:text-gray-200">
+      <Sidebar 
+          isOpen={isSidebarOpen}
+          chats={chats}
+          activeChatId={activeChatId}
+          onNewChat={handleNewChat}
+          onSelectChat={handleSelectChat}
+          onDeleteChat={handleDeleteChat}
+          language={language}
       />
-      <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 overflow-hidden">
-        <ContextSelector
-          location={context.location}
-          crop={context.crop}
-          onLocationChange={(loc) => setContext((prev) => ({ ...prev, location: loc }))}
-          onCropChange={(crp) => setContext((prev) => ({ ...prev, crop: crp }))}
-          language={language}
+      <div className="flex flex-col flex-1 h-screen">
+        <Header 
+          language={language} 
+          onLanguageChange={handleLanguageChange}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
-        <ChatInterface
-          messages={messages}
-          isLoading={isLoading}
-          isStreaming={isStreaming}
-          onSendMessage={handleSendMessage}
-          language={language}
-          isNewChat={isNewChat}
-        />
-      </main>
-      <Footer language={language} />
+        <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 overflow-hidden">
+          {!isOnline && (
+              <div className="bg-yellow-500/20 border border-yellow-600/30 text-yellow-800 dark:text-yellow-200 text-sm rounded-lg p-3 mb-4 text-center">
+                  You are currently offline. Messages will be sent when you reconnect.
+              </div>
+          )}
+          <ContextSelector
+            location={context.location}
+            crop={context.crop}
+            onLocationChange={(loc) => setContext((prev) => ({ ...prev, location: loc }))}
+            onCropChange={(crp) => setContext((prev) => ({ ...prev, crop: crp }))}
+            language={language}
+          />
+          <ChatInterface
+            messages={messages}
+            isLoading={isLoading}
+            isStreaming={isStreaming}
+            onSendMessage={handleSendMessage}
+            language={language}
+            isNewChat={isNewChat}
+            isOnline={isOnline}
+          />
+        </main>
+        <Footer language={language} />
+      </div>
     </div>
   );
 };

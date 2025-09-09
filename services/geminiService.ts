@@ -1,4 +1,3 @@
-// Fix: Implement the full content of the Gemini service file.
 import { GoogleGenAI } from "@google/genai";
 import type { LanguageCode } from '../types';
 import { getSystemInstruction } from '../constants';
@@ -35,25 +34,28 @@ export const getAIResponse = async (
   const modelName = 'gemini-2.5-flash';
   
   const systemInstruction = getSystemInstruction(language);
-  const fullPrompt = `Context: Location - ${context.location}, Crop - ${context.crop}. Question: ${prompt}`;
+  // Combine system instruction and user prompt into a single text block.
+  // This is a more robust way to provide instructions and fixes the streaming error.
+  const fullPrompt = `${systemInstruction}\n\n---\n\nContext: Location - ${context.location}, Crop - ${context.crop}.\n\nQuestion: ${prompt}`;
 
   let contents: any;
 
   if (imageFile) {
     const imagePart = await fileToGenerativePart(imageFile);
+    // For multimodal requests, the prompt goes in a separate text part.
     const textPart = { text: fullPrompt };
     contents = { parts: [imagePart, textPart] };
   } else {
+    // For text-only requests, the entire prompt is the content.
     contents = fullPrompt;
   }
 
   try {
+    // Removed the 'config' object with systemInstruction to fix the streaming error.
+    // The instruction is now part of the main prompt.
     const response = await ai.models.generateContentStream({
       model: modelName,
       contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-      },
     });
 
     return response;
