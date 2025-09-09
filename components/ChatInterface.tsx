@@ -1,37 +1,6 @@
-// Add TypeScript definitions for the Web Speech API
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  [index: number]: SpeechRecognitionAlternative;
-}
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  onresult: (event: SpeechRecognitionEvent) => void;
-  onerror: (event: any) => void; // Using `any` for simplicity
-  onend: () => void;
-}
-// Fix: Augment the Window interface to include SpeechRecognition APIs, resolving errors when accessing `window.SpeechRecognition`.
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognition;
-    webkitSpeechRecognition?: new () => SpeechRecognition;
-  }
-}
-
-
+// Fix: Remove local type definitions and import centralized types to resolve conflicts.
 import React, { useState, useRef, useEffect } from 'react';
-import type { Message, LanguageCode } from '../types';
+import type { Message, LanguageCode, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '../types';
 import { TRANSLATIONS } from '../constants';
 import MessageBubble from './MessageBubble';
 import SendIcon from './icons/SendIcon';
@@ -40,6 +9,8 @@ import MicrophoneIcon from './icons/MicrophoneIcon';
 import WelcomeScreen from './WelcomeScreen';
 import SkeletonLoader from './loaders/SkeletonLoader';
 import TypingIndicator from './loaders/TypingIndicator';
+import VideoCameraIcon from './icons/VideoCameraIcon';
+import LiveAnalysisModal from './LiveAnalysisModal';
 
 interface ChatInterfaceProps {
   messages: Message[];
@@ -62,6 +33,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isLiveModalOpen, setIsLiveModalOpen] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -124,7 +96,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setIsRecording(false);
     };
 
-    recognition.onerror = (event: any) => {
+    // Fix: Use strongly-typed event for onerror.
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       // The 'no-speech' error is a common occurrence when the user doesn't speak.
       // We handle it gracefully by stopping the recording without logging a console error.
       if (event.error !== 'no-speech') {
@@ -187,6 +160,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       onSendMessage(prompt, null);
   }
 
+  const handleLiveCapture = (text: string, image: File) => {
+    onSendMessage(text, image);
+    setIsLiveModalOpen(false);
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl shadow-lg overflow-hidden border border-slate-200/60 dark:border-gray-700/60">
       <div className="flex-1 p-4 overflow-y-auto">
@@ -236,6 +214,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           >
               <MicrophoneIcon />
           </button>
+           <button 
+              onClick={() => setIsLiveModalOpen(true)}
+              title="Live Analysis"
+              aria-label="Live Analysis"
+              className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:text-white transition-colors"
+          >
+              <VideoCameraIcon />
+          </button>
 
           <textarea
             ref={textareaRef}
@@ -257,6 +243,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </button>
         </div>
       </div>
+      <LiveAnalysisModal
+        isOpen={isLiveModalOpen}
+        onClose={() => setIsLiveModalOpen(false)}
+        onCapture={handleLiveCapture}
+        language={language}
+      />
     </div>
   );
 };
