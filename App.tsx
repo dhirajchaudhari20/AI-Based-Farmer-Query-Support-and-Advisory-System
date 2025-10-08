@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Message, LanguageCode, Theme, ChatMetadata } from './types';
+import type { Message, LanguageCode, Theme, ChatMetadata, User } from './types';
 import Header from './components/Header';
 import ContextSelector from './components/ContextSelector';
 import ChatInterface from './components/ChatInterface';
 import Footer from './components/Footer';
 import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import LoginScreen from './components/LoginScreen';
+import useAuth from './hooks/useAuth';
 import { getAIResponse } from './services/geminiService';
 import { databaseService } from './services/databaseService';
 import { KERALA_DISTRICTS, COMMON_CROPS, TRANSLATIONS } from './constants';
@@ -13,31 +16,29 @@ import { offlineService } from './services/offlineService';
 const THEME_KEY = 'kissanMitraTheme';
 
 const App: React.FC = () => {
+  const { user, login, logout } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
-  const [language, setLanguage] = useState<LanguageCode>('ml');
+  const [language, setLanguage] = useState<LanguageCode>('en');
   const [context, setContext] = useState({
     location: KERALA_DISTRICTS[0],
     crop: COMMON_CROPS[0],
   });
-  // Fix: Lazily initialize theme with validation for robustness.
   const [theme, setTheme] = useState<Theme>(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
-    // Ensure the saved value is a valid theme before using it.
     if (savedTheme === 'light' || savedTheme === 'dark') {
       return savedTheme;
     }
-    // Fallback to system preference if no valid theme is saved.
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     return prefersDark ? 'dark' : 'light';
   });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
-  // New state for multi-chat database feature
   const [chats, setChats] = useState<ChatMetadata[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('chat');
 
 
   // Effect to manage online/offline status
@@ -62,7 +63,6 @@ const App: React.FC = () => {
   }, []); 
 
 
-  // Effect to apply theme changes to the DOM and localStorage.
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -72,7 +72,6 @@ const App: React.FC = () => {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
-  // Simplified theme toggle handler.
   const handleToggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
@@ -82,14 +81,15 @@ const App: React.FC = () => {
       setChats(chatList);
   };
 
-  // Load chat history from IndexedDB on initial mount
   useEffect(() => {
-    loadChats();
-    // Start with a new chat session if none is active
-    handleNewChat();
-  }, []);
+    if (user) {
+        loadChats();
+        if (!activeChatId) {
+            handleNewChat();
+        }
+    }
+  }, [user]);
 
-  // Set the initial welcome message when starting a new chat
   useEffect(() => {
       if (activeChatId === null) {
           setMessages([
@@ -110,6 +110,8 @@ const App: React.FC = () => {
   const handleSendMessage = useCallback(async (inputText: string, imageFile: File | null) => {
     if (!inputText.trim() && !imageFile) return;
 
+    setCurrentView('chat');
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -123,6 +125,12 @@ const App: React.FC = () => {
 
     if (!navigator.onLine) {
         await offlineService.addToQueue(inputText, imageFile);
+        setMessages((prev) => [...prev, {
+            id: 'offline-notice',
+            role: 'model',
+            text: 'You are offline. Your message has been queued and will be sent when you reconnect.',
+            timestamp: new Date()
+        }]);
         return;
     }
 
@@ -131,14 +139,12 @@ const App: React.FC = () => {
 
     let currentChatId = activeChatId;
 
-    // If this is the first message of a new chat, create the chat session in the DB
     if (currentChatId === null) {
         const newChatId = `chat-${Date.now()}`;
         const title = inputText.split(' ').slice(0, 5).join(' ') || 'New Chat';
         await databaseService.addOrUpdateChat({ id: newChatId, title, timestamp: new Date(), messages: [userMessage] });
         setActiveChatId(newChatId);
         currentChatId = newChatId;
-        // Refresh sidebar
         loadChats(); 
     }
 
@@ -166,7 +172,6 @@ const App: React.FC = () => {
         );
       }
        
-      // After streaming is complete, save the final state to the database
       const finalModelMessage = { ...initialModelMessage, text: aggregatedText };
       const finalMessages = [...updatedMessages, finalModelMessage];
       const chatToSave = await databaseService.getChat(currentChatId!);
@@ -192,7 +197,8 @@ const App: React.FC = () => {
 
   const handleNewChat = () => {
     setActiveChatId(null);
-    setMessages([]); // Will be populated by useEffect
+    setMessages([]);
+    setCurrentView('chat');
     if (window.innerWidth <= 768) {
         setIsSidebarOpen(false);
     }
@@ -203,6 +209,7 @@ const App: React.FC = () => {
       if (chat) {
           setActiveChatId(chat.id);
           setMessages(chat.messages);
+          setCurrentView('chat');
       }
       if (window.innerWidth <= 768) {
           setIsSidebarOpen(false);
@@ -219,10 +226,23 @@ const App: React.FC = () => {
       }
   };
   
+  const handleLogout = () => {
+      if (window.confirm("Are you sure you want to log out?")) {
+          logout();
+          setChats([]);
+          setActiveChatId(null);
+          setMessages([]);
+      }
+  };
+  
   const isNewChat = activeChatId === null;
 
+  if (!user) {
+    return <LoginScreen onLogin={login} language={language} onLanguageChange={handleLanguageChange} />;
+  }
+
   return (
-    <div className="flex h-screen text-gray-800 dark:text-gray-200">
+    <div className="flex h-screen text-gray-800 dark:text-gray-200 bg-slate-50 dark:bg-[#0D1117]">
       <Sidebar 
           isOpen={isSidebarOpen}
           chats={chats}
@@ -231,6 +251,10 @@ const App: React.FC = () => {
           onSelectChat={handleSelectChat}
           onDeleteChat={handleDeleteChat}
           language={language}
+          currentView={currentView}
+          onSetView={setCurrentView}
+          user={user}
+          onLogout={handleLogout}
       />
       <div className="flex flex-col flex-1 h-screen">
         <Header 
@@ -240,28 +264,39 @@ const App: React.FC = () => {
           onToggleTheme={handleToggleTheme}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
-        <main className="flex-1 flex flex-col max-w-4xl w-full mx-auto p-4 overflow-hidden">
+        <main className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-2 sm:p-4 overflow-hidden">
           {!isOnline && (
               <div className="bg-yellow-500/20 border border-yellow-600/30 text-yellow-800 dark:text-yellow-200 text-sm rounded-lg p-3 mb-4 text-center">
                   You are currently offline. Messages will be sent when you reconnect.
               </div>
           )}
-          <ContextSelector
-            location={context.location}
-            crop={context.crop}
-            onLocationChange={(loc) => setContext((prev) => ({ ...prev, location: loc }))}
-            onCropChange={(crp) => setContext((prev) => ({ ...prev, crop: crp }))}
-            language={language}
-          />
-          <ChatInterface
-            messages={messages}
-            isLoading={isLoading}
-            isStreaming={isStreaming}
-            onSendMessage={handleSendMessage}
-            language={language}
-            isNewChat={isNewChat}
-            isOnline={isOnline}
-          />
+          {currentView === 'chat' && (
+            <ContextSelector
+              location={context.location}
+              crop={context.crop}
+              onLocationChange={(loc) => setContext((prev) => ({ ...prev, location: loc }))}
+              onCropChange={(crp) => setContext((prev) => ({ ...prev, crop: crp }))}
+              language={language}
+            />
+          )}
+          
+          <div className="flex-1 overflow-y-auto relative">
+            {currentView === 'chat' ? (
+                <ChatInterface
+                    messages={messages}
+                    isLoading={isLoading}
+                    isStreaming={isStreaming}
+                    onSendMessage={handleSendMessage}
+                    language={language}
+                    isNewChat={isNewChat}
+                    isOnline={isOnline}
+                    location={context.location}
+                />
+            ) : (
+                <Dashboard language={language} location={context.location} />
+            )}
+           </div>
+
         </main>
         <Footer language={language} />
       </div>

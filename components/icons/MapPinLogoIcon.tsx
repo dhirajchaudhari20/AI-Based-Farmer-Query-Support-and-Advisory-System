@@ -1,10 +1,10 @@
 import React from 'react';
 
-interface LogoIconProps {
+interface MapPinLogoIconProps {
   className?: string;
 }
 
-const LogoIcon: React.FC<LogoIconProps> = ({ className }) => (
+const MapPinLogoIcon: React.FC<MapPinLogoIconProps> = ({ className }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     className={className || "h-8 w-8 text-green-500"}
@@ -15,4 +15,4 @@ const LogoIcon: React.FC<LogoIconProps> = ({ className }) => (
   </svg>
 );
 
-export default LogoIcon;
+export default MapPinLogoIcon;

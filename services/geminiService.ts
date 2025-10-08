@@ -2,7 +2,21 @@ import { GoogleGenAI } from "@google/genai";
 import type { LanguageCode } from '../types';
 import { getSystemInstruction } from '../constants';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// The API key is now read from the global window object, where it's placed by config.js at runtime.
+// This is still insecure but necessary for this deployment method.
+declare global {
+    interface Window {
+        KISSAN_MITRA_API_KEY: string;
+    }
+}
+
+const apiKey = window.KISSAN_MITRA_API_KEY || process.env.API_KEY;
+
+if (!apiKey) {
+    console.error("API key is missing. Please ensure it's configured correctly for deployment.");
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 const fileToGenerativePart = async (file: File) => {
   const base64EncodedDataPromise = new Promise<string>((resolve, reject) => {
@@ -34,28 +48,27 @@ export const getAIResponse = async (
   const modelName = 'gemini-2.5-flash';
   
   const systemInstruction = getSystemInstruction(language);
-  // Combine system instruction and user prompt into a single text block.
-  // This is a more robust way to provide instructions and fixes the streaming error.
-  const fullPrompt = `${systemInstruction}\n\n---\n\nContext: Location - ${context.location}, Crop - ${context.crop}.\n\nQuestion: ${prompt}`;
+  const userPrompt = `Context: Location - ${context.location}, Crop - ${context.crop}.\n\nQuestion: ${prompt}`;
 
-  let contents: any;
+  const parts = [];
 
   if (imageFile) {
     const imagePart = await fileToGenerativePart(imageFile);
-    // For multimodal requests, the prompt goes in a separate text part.
-    const textPart = { text: fullPrompt };
-    contents = { parts: [imagePart, textPart] };
-  } else {
-    // For text-only requests, the entire prompt is the content.
-    contents = fullPrompt;
+    parts.push(imagePart);
   }
+  
+  parts.push({ text: userPrompt });
 
   try {
-    // Removed the 'config' object with systemInstruction to fix the streaming error.
-    // The instruction is now part of the main prompt.
     const response = await ai.models.generateContentStream({
       model: modelName,
-      contents: contents,
+      // Fix: Wrap the parts array in a Content object with a specified role.
+      // This more explicit structure can prevent 500 errors when combining
+      // system instructions, streaming, and multipart (image + text) inputs.
+      contents: { role: 'user', parts },
+      config: {
+          systemInstruction: systemInstruction,
+      },
     });
 
     return response;

@@ -68,6 +68,37 @@ interface Translations {
     removeImage: TranslationDict;
     welcomeTitle: TranslationDict;
     promptStarters: { title: TranslationDict; prompts: TranslationDict[] };
+    dashboard: TranslationDict;
+    chat: TranslationDict;
+    searchChats: TranslationDict;
+    weatherForecast: TranslationDict;
+    marketPrices: TranslationDict;
+    latestNews: TranslationDict;
+    cropTableHeader: TranslationDict;
+    priceTableHeader: TranslationDict;
+    // Auth Translations
+    loginWelcome: TranslationDict;
+    loginPrompt: TranslationDict;
+    nameLabel: TranslationDict;
+    namePlaceholder: TranslationDict;
+    loginButton: TranslationDict;
+    logoutButton: TranslationDict;
+    welcomeBack: TranslationDict;
+    speakYourName: TranslationDict;
+    // Live Session Translations
+    liveSessionTitle: TranslationDict;
+    liveSession: TranslationDict;
+    statusIdle: TranslationDict;
+    statusConnecting: TranslationDict;
+    statusListening: TranslationDict;
+    statusSpeaking: TranslationDict;
+    statusError: TranslationDict;
+    statusPermission: TranslationDict;
+    startSession: TranslationDict;
+    stopSession: TranslationDict;
+    youSaid: TranslationDict;
+    kissanMitraSaid: TranslationDict;
+    close: TranslationDict;
 }
 
 export const TRANSLATIONS: Translations = {
@@ -195,7 +226,36 @@ export const TRANSLATIONS: Translations = {
                 hi: "मेरी धान की फसल पर इस कीट को पहचानें।",
             }
         ]
-    }
+    },
+    dashboard: { en: "Dashboard", ml: "ഡാഷ്ബോർഡ്", mr: "डॅशबोर्ड", hi: "डैशबोर्ड" },
+    chat: { en: "Chat", ml: "ചാറ്റ്", mr: "चॅट", hi: "चैट" },
+    searchChats: { en: "Search chats...", ml: "ചാറ്റുകൾ തിരയുക...", mr: "चॅट्स शोधा...", hi: "चैट खोजें..." },
+    weatherForecast: { en: "Weather Forecast", ml: "കാലാവസ്ഥാ പ്രവചനം", mr: "हवामान अंदाज", hi: "मौसम पूर्वानुमान" },
+    marketPrices: { en: "Market Prices", ml: "വിപണി വില", mr: "बाजारभाव", hi: "बाजार मूल्य" },
+    latestNews: { en: "Latest News & Schemes", ml: "പുതിയ വാർത്തകളും പദ്ധതികളും", mr: "ताज्या बातम्या आणि योजना", hi: "नवीनतम समाचार और योजनाएं" },
+    cropTableHeader: { en: "Crop", ml: "വിള", mr: "पीक", hi: "फसल" },
+    priceTableHeader: { en: "Price (per Quintal)", ml: "വില (ക്വിന്റലിന്)", mr: "किंमत (प्रति क्विंटल)", hi: "मूल्य (प्रति क्विंटल)" },
+    loginWelcome: { en: "Welcome to Kissan Mitra", ml: "കിസാൻ മിത്രയിലേക്ക് സ്വാഗതം", mr: "किसान मित्र मध्ये आपले स्वागत आहे", hi: "किसान मित्र में आपका स्वागत है" },
+    loginPrompt: { en: "Your personal AI farming assistant.", ml: "നിങ്ങളുടെ സ്വകാര്യ AI കാർഷിക സഹായി.", mr: "तुमचा वैयक्तिक AI शेती सहाय्यक.", hi: "आपका व्यक्तिगत एआई खेती सहायक।" },
+    nameLabel: { en: "Enter your name", ml: "നിങ്ങളുടെ പേര് നൽകുക", mr: "तुमचे नाव टाका", hi: "अपना नाम दर्ज करें" },
+    namePlaceholder: { en: "e.g., Suresh Kumar", ml: "ഉദാ: സുരേഷ് കുമാർ", mr: "उदा. सुरेश कुमार", hi: "जैसे, सुरेश कुमार" },
+    loginButton: { en: "Login", ml: "ലോഗിൻ ചെയ്യുക", mr: "लॉग इन करा", hi: "लॉग इन करें" },
+    logoutButton: { en: "Logout", ml: "ലോഗൗട്ട്", mr: "लॉग आउट", hi: "लॉग आउट" },
+    welcomeBack: { en: "Welcome", ml: "സ്വാഗതം", mr: "स्वागत आहे", hi: "स्वागत है" },
+    speakYourName: { en: "Speak your name", ml: "നിങ്ങളുടെ പേര് പറയുക", mr: "तुमचे नाव सांगा", hi: "अपना नाम बोलें" },
+    liveSession: { en: "Live Session", ml: "തത്സമയ സെഷൻ", mr: "थेट सत्र", hi: "लाइव सत्र" },
+    liveSessionTitle: { en: "Live Farm Analysis", ml: "തത്സമയ കാർഷിക വിശകലനം", mr: "थेट शेती विश्लेषण", hi: "लाइव कृषि विश्लेषण" },
+    statusIdle: { en: "Ready to start session", ml: "സെഷൻ ആരംഭിക്കാൻ തയ്യാറാണ്", mr: "सत्र सुरू करण्यास तयार", hi: "सत्र शुरू करने के लिए तैयार" },
+    statusConnecting: { en: "Connecting...", ml: "ബന്ധിപ്പിക്കുന്നു...", mr: "कनेक्ट करत आहे...", hi: "कनेक्ट हो रहा है..." },
+    statusListening: { en: "Listening...", ml: "ശ്രദ്ധിക്കുന്നു...", mr: "ऐकत आहे...", hi: "सुन रहा है..." },
+    statusSpeaking: { en: "AI is speaking...", ml: "AI സംസാരിക്കുന്നു...", mr: "AI बोलत आहे...", hi: "एआई बोल रहा है..." },
+    statusError: { en: "An error occurred. Please restart.", ml: "ഒരു പിശക് സംഭവിച്ചു. ദയവായി പുനരാരംഭിക്കുക.", mr: "एक त्रुटी आली. कृपया पुन्हा सुरू करा.", hi: "एक त्रुटि हुई। कृपया पुनरारंभ करें।" },
+    statusPermission: { en: "Please enable camera & microphone.", ml: "ക്യാമറയും മൈക്രോഫോണും പ്രവർത്തനക്ഷമമാക്കുക.", mr: "कृपया कॅमेरा आणि मायक्रोफोन सक्षम करा.", hi: "कृपया कैमरा और माइक्रोफ़ोन सक्षम करें।" },
+    startSession: { en: "Start Session", ml: "സെഷൻ ആരംഭിക്കുക", mr: "सत्र सुरू करा", hi: "सत्र शुरू करें" },
+    stopSession: { en: "Stop Session", ml: "സെഷൻ നിർത്തുക", mr: "सत्र थांबवा", hi: "सत्र रोकें" },
+    youSaid: { en: "You said:", ml: "നിങ്ങൾ പറഞ്ഞത്:", mr: "तुम्ही म्हणाला:", hi: "आपने कहा:" },
+    kissanMitraSaid: { en: "Kissan Mitra said:", ml: "കിസാൻ മിത്ര പറഞ്ഞത്:", mr: "किसान मित्र म्हणाला:", hi: "किसान मित्र ने कहा:" },
+    close: { en: "Close", ml: "അടയ്ക്കുക", mr: "बंद करा", hi: "बंद करें" },
 };
 
 export const getSystemInstruction = (language: LanguageCode): string => {

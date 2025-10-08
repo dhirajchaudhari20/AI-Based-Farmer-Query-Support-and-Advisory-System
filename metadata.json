@@ -1,5 +1,5 @@
 {
-  "name": "Copy of Copy of Digital Krishi Officer",
+  "name": "Digital Krishi Officer",
   "description": "An AI-powered advisory system that allows farmers to ask queries in their own language (preferably Malayalam) and receive accurate, context-aware answers instantly, with support for text, voice, and image inputs.",
   "requestFramePermissions": [
     "microphone",

@@ -34,6 +34,11 @@ export interface ChatMetadata {
   timestamp: Date;
 }
 
+// Represents a logged-in user
+export interface User {
+  name: string;
+}
+
 
 // Fix: Add TypeScript definitions for the Web Speech API to be used across the app.
 export interface SpeechRecognitionEvent extends Event {
@@ -73,5 +78,7 @@ declare global {
   interface Window {
     SpeechRecognition?: new () => SpeechRecognition;
     webkitSpeechRecognition?: new () => SpeechRecognition;
+    // Fix: Add webkitAudioContext type to the global Window interface to fix TypeScript errors.
+    webkitAudioContext?: typeof AudioContext;
   }
 }

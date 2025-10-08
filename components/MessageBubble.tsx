@@ -185,8 +185,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
   
   const bubbleClasses = isUser
     ? 'bg-gradient-to-br from-green-500 to-green-600 text-white shadow-md'
-    // eslint-disable-next-line max-len
-    : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md border border-slate-100 dark:border-gray-600';
+    : 'bg-white dark:bg-[#21262D] text-gray-800 dark:text-gray-200 shadow-md border border-slate-100 dark:border-gray-700';
   const containerClasses = isUser ? 'justify-end' : 'justify-start';
   const bubbleAlignment = isUser ? 'rounded-br-none' : 'rounded-bl-none';
 

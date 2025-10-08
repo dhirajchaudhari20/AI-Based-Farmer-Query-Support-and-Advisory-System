@@ -18,9 +18,9 @@ const ContextSelector: React.FC<ContextSelectorProps> = ({
   language,
 }) => {
   return (
-    <div className="bg-slate-50/50 dark:bg-gray-800/50 backdrop-blur-xl p-3 rounded-2xl mb-4 flex flex-col sm:flex-row gap-4 border border-slate-200/60 dark:border-gray-700/60 shadow-sm">
+    <div className="p-3 mb-4 flex flex-col sm:flex-row gap-4">
       <div className="flex-1">
-        <label htmlFor="location-select" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+        <label htmlFor="location-select" className="block text-xs font-medium text-gray-400 mb-1">
           {TRANSLATIONS.locationLabel[language]}
         </label>
         <div className="relative">
@@ -28,7 +28,7 @@ const ContextSelector: React.FC<ContextSelectorProps> = ({
             id="location-select"
             value={location}
             onChange={(e) => onLocationChange(e.target.value)}
-            className="w-full p-2 text-sm bg-slate-100/50 dark:bg-gray-700/50 border border-slate-300/50 dark:border-gray-600/50 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+            className="w-full p-2 text-sm bg-[#161B22] border border-gray-700 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-300"
           >
             {KERALA_DISTRICTS.map((district) => (
               <option key={district} value={district}>
@@ -36,13 +36,13 @@ const ContextSelector: React.FC<ContextSelectorProps> = ({
               </option>
             ))}
           </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-400">
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
           </div>
         </div>
       </div>
       <div className="flex-1">
-        <label htmlFor="crop-select" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+        <label htmlFor="crop-select" className="block text-xs font-medium text-gray-400 mb-1">
           {TRANSLATIONS.cropLabel[language]}
         </label>
         <div className="relative">
@@ -50,7 +50,7 @@ const ContextSelector: React.FC<ContextSelectorProps> = ({
           id="crop-select"
           value={crop}
           onChange={(e) => onCropChange(e.target.value)}
-          className="w-full p-2 text-sm bg-slate-100/50 dark:bg-gray-700/50 border border-slate-300/50 dark:border-gray-600/50 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+          className="w-full p-2 text-sm bg-[#161B22] border border-gray-700 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-300"
         >
           {COMMON_CROPS.map((cropItem) => (
             <option key={cropItem} value={cropItem}>
@@ -58,7 +58,7 @@ const ContextSelector: React.FC<ContextSelectorProps> = ({
             </option>
           ))}
         </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-400">
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
           </div>
         </div>

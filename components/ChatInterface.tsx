@@ -20,6 +20,7 @@ interface ChatInterfaceProps {
   language: LanguageCode;
   isNewChat: boolean;
   isOnline: boolean;
+  location: string;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -30,6 +31,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   language,
   isNewChat,
   isOnline,
+  location,
 }) => {
   const [inputText, setInputText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -163,17 +165,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       onSendMessage(prompt, null);
   }
 
-  const handleLiveCapture = (text: string, image: File) => {
-    onSendMessage(text, image);
-    setIsLiveModalOpen(false);
-  };
-
-  const canSendMessage = (!!inputText.trim() || !!imageFile) && !isLoading;
+  const canSendMessage = (!!inputText.trim() || !!imageFile) && !isLoading && !isStreaming && isOnline;
 
   return (
-    <div className="flex-1 flex flex-col bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl shadow-lg overflow-hidden border border-slate-200/60 dark:border-gray-700/60">
+    <div className="flex-1 flex flex-col bg-transparent overflow-hidden h-full">
       <div className="flex-1 p-4 overflow-y-auto">
-        {isNewChat ? (
+        {isNewChat && messages.length <= 1 ? (
           <WelcomeScreen onPromptClick={handlePromptClick} language={language} />
         ) : (
           <div className="space-y-4">
@@ -187,9 +184,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
       </div>
 
-      <div className="p-4 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm border-t border-slate-200/80 dark:border-gray-700/80">
+      <div className="p-2 sm:p-4">
         {imagePreview && (
-          <div className="relative w-20 h-20 mb-2">
+          <div className="relative w-20 h-20 mb-2 ml-4">
             <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-lg shadow-sm" />
             <button
               onClick={removeImage}
@@ -201,8 +198,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </button>
           </div>
         )}
-        <div className="relative flex items-center bg-gray-800 dark:bg-gray-900 rounded-full p-2 shadow-inner transition-shadow duration-300 focus-within:shadow-[0_0_15px_rgba(34,197,94,0.5)]">
-          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-400 dark:text-gray-500 hover:text-white p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline}>
+        <div className="relative flex items-end bg-[#161B22] rounded-2xl p-2 shadow-lg transition-shadow duration-300 focus-within:ring-2 focus-within:ring-green-500 border border-gray-700">
+          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-400 hover:text-green-400 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline}>
               <AttachmentIcon />
           </button>
           <input
@@ -216,16 +213,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <button 
               onClick={handleMicClick}
               title={isRecording ? TRANSLATIONS.stopRecording[language] : TRANSLATIONS.startRecording[language]}
-              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 dark:text-gray-500 hover:text-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 hover:text-green-400'} disabled:opacity-50 disabled:cursor-not-allowed`}
               disabled={!isOnline}
           >
               <MicrophoneIcon />
           </button>
            <button 
               onClick={() => setIsLiveModalOpen(true)}
-              title="Live Analysis"
-              aria-label="Live Analysis"
-              className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={TRANSLATIONS.liveSession[language]}
+              aria-label={TRANSLATIONS.liveSession[language]}
+              className="p-2 rounded-full text-gray-400 hover:text-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!isOnline}
           >
               <VideoCameraIcon />
@@ -237,14 +234,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={isOnline ? TRANSLATIONS.sendMessagePlaceholder[language] : "You are offline. Type a message to send later."}
-            className="flex-1 bg-transparent text-white px-4 py-2 border-none resize-none focus:outline-none focus:ring-0 placeholder-gray-500"
+            className="flex-1 bg-transparent text-gray-200 px-2 py-2 border-none resize-none focus:outline-none focus:ring-0 placeholder-gray-500"
             rows={1}
+            disabled={!isOnline}
           />
           
           <button
             onClick={handleSend}
             disabled={!canSendMessage}
-            className="bg-green-500 text-white w-10 h-10 flex items-center justify-center rounded-xl hover:bg-green-600 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors"
+            className="bg-[#2D3340] text-white w-10 h-10 flex items-center justify-center rounded-md hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg disabled:shadow-none"
             aria-label="Send message"
           >
             <SendIcon />
@@ -254,8 +252,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <LiveAnalysisModal
         isOpen={isLiveModalOpen}
         onClose={() => setIsLiveModalOpen(false)}
-        onCapture={handleLiveCapture}
         language={language}
+        location={location}
       />
     </div>
   );

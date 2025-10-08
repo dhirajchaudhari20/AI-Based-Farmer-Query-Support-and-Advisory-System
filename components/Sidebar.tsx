@@ -1,8 +1,13 @@
-import React from 'react';
-import type { ChatMetadata, LanguageCode } from '../types';
+import React, { useState } from 'react';
+import type { ChatMetadata, LanguageCode, User } from '../types';
 import { TRANSLATIONS } from '../constants';
 import NewChatIcon from './icons/NewChatIcon';
 import TrashIcon from './icons/TrashIcon';
+import SearchIcon from './icons/SearchIcon';
+import DashboardIcon from './icons/DashboardIcon';
+import ChatBubbleIcon from './icons/ChatBubbleIcon';
+import UserCircleIcon from './icons/UserCircleIcon';
+import LogoutIcon from './icons/LogoutIcon';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -12,6 +17,10 @@ interface SidebarProps {
   onSelectChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
   language: LanguageCode;
+  currentView: 'chat' | 'dashboard';
+  onSetView: (view: 'chat' | 'dashboard') => void;
+  user: User;
+  onLogout: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -21,38 +30,59 @@ const Sidebar: React.FC<SidebarProps> = ({
   onNewChat,
   onSelectChat,
   onDeleteChat,
-  // Fix: Destructure the language prop to make it available within the component.
   language,
+  currentView,
+  onSetView,
+  user,
+  onLogout,
 }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Prevent onSelectChat from firing
     onDeleteChat(id);
   };
 
+  const filteredChats = chats.filter(chat =>
+    chat.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <aside
-      className={`absolute md:relative z-20 flex flex-col bg-slate-50 dark:bg-gray-800 border-r border-slate-200 dark:border-gray-700 transition-transform duration-300 ease-in-out ${
+      className={`absolute md:relative z-20 flex flex-col bg-slate-100 dark:bg-[#161B22] border-r border-slate-200 dark:border-[#2D3340] transition-transform duration-300 ease-in-out ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
       } md:translate-x-0 w-64 h-full flex-shrink-0`}
     >
-      <div className="p-4 border-b border-slate-200 dark:border-gray-700">
+      <div className="p-4 border-b border-slate-200 dark:border-[#2D3340] space-y-4">
         <button
           onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-500 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 dark:focus:ring-offset-gray-800 transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 dark:focus:ring-offset-gray-900 transition-all shadow-md hover:shadow-lg"
         >
           <NewChatIcon />
           <span>{TRANSLATIONS.newChat[language]}</span>
         </button>
+        <div className="relative">
+            <input
+                type="text"
+                placeholder={TRANSLATIONS.searchChats[language]}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-200 dark:bg-gray-800 border-transparent focus:border-green-500 focus:ring-green-500 rounded-md text-sm pl-9"
+            />
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+                <SearchIcon />
+            </div>
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto">
         <ul className="p-2 space-y-1">
-          {chats.map((chat) => (
+          {filteredChats.map((chat) => (
             <li key={chat.id}>
               <button
                 onClick={() => onSelectChat(chat.id)}
                 className={`w-full text-left text-sm px-3 py-2 rounded-md transition-colors group flex justify-between items-center ${
-                  activeChatId === chat.id
+                  activeChatId === chat.id && currentView === 'chat'
                     ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
                     : 'text-gray-600 hover:bg-slate-200/70 dark:text-gray-300 dark:hover:bg-gray-700/70'
                 }`}
@@ -60,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <span className="truncate flex-1 pr-2">{chat.title}</span>
                  <span
                     onClick={(e) => handleDelete(e, chat.id)}
-                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:hover:text-red-400 p-1"
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:hover:text-red-400 p-1 rounded-full hover:bg-slate-200 dark:hover:bg-gray-600"
                     title="Delete chat"
                   >
                    <TrashIcon />
@@ -70,6 +100,47 @@ const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </ul>
       </nav>
+      
+      {/* View Switcher */}
+      <div className="p-2 border-t border-slate-200 dark:border-[#2D3340]">
+        <ul className="space-y-1">
+            <li>
+                <button onClick={() => onSetView('dashboard')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${currentView === 'dashboard' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'text-gray-600 hover:bg-slate-200/70 dark:text-gray-300 dark:hover:bg-gray-700/70'}`}>
+                    <DashboardIcon />
+                    {TRANSLATIONS.dashboard[language]}
+                </button>
+            </li>
+            <li>
+                <button onClick={() => onSetView('chat')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${currentView === 'chat' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'text-gray-600 hover:bg-slate-200/70 dark:text-gray-300 dark:hover:bg-gray-700/70'}`}>
+                    <ChatBubbleIcon />
+                    {TRANSLATIONS.chat[language]}
+                </button>
+            </li>
+        </ul>
+      </div>
+
+      {/* User Profile Section */}
+      <div className="p-4 border-t border-slate-200 dark:border-[#2D3340]">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-200 dark:bg-green-900 flex items-center justify-center text-green-700 dark:text-green-200 font-bold">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{user.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{TRANSLATIONS.welcomeBack[language]}</p>
+                </div>
+            </div>
+            <button 
+                onClick={onLogout}
+                title={TRANSLATIONS.logoutButton[language]}
+                className="p-2 text-gray-500 rounded-md hover:bg-slate-200 dark:text-gray-400 dark:hover:bg-gray-700"
+            >
+                <LogoutIcon />
+            </button>
+        </div>
+      </div>
+
     </aside>
   );
 };
