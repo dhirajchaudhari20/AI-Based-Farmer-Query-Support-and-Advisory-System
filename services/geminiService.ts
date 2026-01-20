@@ -1,33 +1,21 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from '@google/genai';
 import type { LanguageCode } from '../types';
-import { getSystemInstruction } from '../constants';
+import { LANGUAGES, INDIAN_STATES_DISTRICTS } from '../constants';
 
-// The API key is now read from the global window object, where it's placed by config.js at runtime.
-// This is still insecure but necessary for this deployment method.
-declare global {
-    interface Window {
-        KISSAN_MITRA_API_KEY: string;
-    }
-}
 
-const apiKey = window.KISSAN_MITRA_API_KEY || process.env.API_KEY;
+// FIX: Ensure API_KEY is accessed from environment variables as per guidelines.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
-if (!apiKey) {
-    console.error("API key is missing. Please ensure it's configured correctly for deployment.");
-}
-
-const ai = new GoogleGenAI({ apiKey: apiKey });
-
+// Helper function to convert a File object to a GoogleGenerativeAI.Part object
 const fileToGenerativePart = async (file: File) => {
   const base64EncodedDataPromise = new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const result = reader.result as string;
-      const base64Data = result.split(',')[1];
-      if (base64Data) {
-        resolve(base64Data);
+      if (reader.result) {
+        // The result includes the Base64 prefix, which we need to remove.
+        resolve((reader.result as string).split(',')[1]);
       } else {
-        reject(new Error("Failed to read file as base64"));
+        reject(new Error("Failed to read file."));
       }
     };
     reader.onerror = (error) => reject(error);
@@ -35,45 +23,142 @@ const fileToGenerativePart = async (file: File) => {
   });
 
   return {
-    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+    inlineData: {
+      data: await base64EncodedDataPromise,
+      mimeType: file.type,
+    },
   };
 };
 
+const getSystemInstruction = (context: { state: string; district: string; crop: string }, language: LanguageCode) => {
+  const langName = {
+    en: 'English',
+    hi: 'Hindi',
+    mr: 'Marathi',
+    ml: 'Malayalam'
+  };
+
+  return `You are Agri-Intel, an expert AI agricultural assistant designed for Indian farmers. 
+Your responses must be tailored to the user's specific context.
+
+Current context:
+- State: ${context.state}
+- District: ${context.district}
+- Primary Crop of Interest: ${context.crop}
+- Language for response: ${langName[language]}
+
+Your primary functions are:
+1.  **Disease and Pest Diagnosis:** Analyze images of crops to identify diseases, pests, and nutrient deficiencies.
+2.  **Treatment Recommendations:** Provide detailed, actionable advice, including both organic and chemical treatment options suitable for the user's region.
+3.  **Crop Management:** Offer guidance on best practices for the specified crop, considering local conditions.
+4.  **Data Interpretation:** Explain data from the user's dashboard in a simple, understandable way.
+
+Guidelines for your responses:
+- **Clarity and Simplicity:** Use simple language. Avoid technical jargon unless explained.
+- **Actionable Advice:** Provide clear, step-by-step instructions.
+- **Regional Specificity:** Your advice must be relevant to the user's state and district.
+- **Language:** You MUST respond in the specified language (${langName[language]}).
+- **Identity:** If asked about your origin or creator, you must state that you were developed by a group of students from St. John College of Engineering and Management.
+- **Scope:** Your function is strictly limited to agriculture. Politely refuse any query outside this scope (e.g., programming, history).
+- **Formatting:** Use Markdown for formatting. Use lists, bold text, and headings to make your answers easy to read. For example:
+    **Problem:**
+    [Brief description]
+
+    **Solution:**
+    1. [Step 1]
+    2. [Step 2]`;
+};
+
 export const getAIResponse = async (
-  prompt: string,
+  inputText: string,
   imageFile: File | null,
-  context: { location: string; crop: string },
+  context: { state: string; district: string; crop: string },
   language: LanguageCode
 ) => {
-  const modelName = 'gemini-2.5-flash';
+  // FIX: Use the recommended model for multimodal tasks.
+  const model = 'gemini-2.5-flash';
   
-  const systemInstruction = getSystemInstruction(language);
-  const userPrompt = `Context: Location - ${context.location}, Crop - ${context.crop}.\n\nQuestion: ${prompt}`;
-
-  const parts = [];
+  const systemInstruction = getSystemInstruction(context, language);
+  
+  const textPart = { text: `User's question: "${inputText}"` };
+  const contentParts = [];
 
   if (imageFile) {
     const imagePart = await fileToGenerativePart(imageFile);
-    parts.push(imagePart);
+    contentParts.push(imagePart);
   }
-  
-  parts.push({ text: userPrompt });
+  contentParts.push(textPart);
 
-  try {
-    const response = await ai.models.generateContentStream({
-      model: modelName,
-      // Fix: Wrap the parts array in a Content object with a specified role.
-      // This more explicit structure can prevent 500 errors when combining
-      // system instructions, streaming, and multipart (image + text) inputs.
-      contents: { role: 'user', parts },
-      config: {
-          systemInstruction: systemInstruction,
-      },
-    });
+  // FIX: Use generateContentStream as the app expects a streaming response.
+  const stream = await ai.models.generateContentStream({
+    model: model,
+    contents: { parts: contentParts },
+    config: {
+      systemInstruction: systemInstruction,
+    }
+  });
 
-    return response;
-  } catch (error) {
-    console.error("Error getting AI response stream:", error);
-    throw error;
-  }
+  return stream;
+};
+
+export const parseLoginDetailsFromSpeech = async (transcript: string): Promise<{name: string | null, lang: LanguageCode | null, state: string | null, district: string | null}> => {
+    const model = 'gemini-2.5-flash';
+    const allLangs = LANGUAGES.map(l => l.name).join(', ');
+    const allStates = Object.keys(INDIAN_STATES_DISTRICTS).join(', ');
+    const langCodeMap: Record<string, LanguageCode> = {
+        'English': 'en',
+        'Hindi': 'hi',
+        'Marathi': 'mr',
+        'Malayalam': 'ml'
+    };
+
+    const prompt = `You are an expert system for parsing user login details from a single, potentially multi-lingual sentence. The user's spoken transcript is: "${transcript}".
+    You must extract the following four entities:
+    1.  **name**: The user's full name.
+    2.  **language**: The user's preferred language for the app. It MUST be one of these: [${allLangs}].
+    3.  **state**: The user's state in India. It MUST be one of these: [${allStates}].
+    4.  **district**: The user's district. It must be a valid district within the identified state.
+
+    Analyze the transcript and return a JSON object with the extracted details.
+    - Convert the parsed language name to its corresponding two-letter code (e.g., 'Marathi' -> 'mr').
+    - If a value cannot be reliably determined, its value in the JSON object should be null.
+    - Be very precise with State and District names, matching them exactly from the provided lists.
+
+    Example 1:
+    Transcript: "Mera naam Rohan hai, main Marathi mein baat karna chahta hoon, aur main Maharashtra ke Pune jile se hoon"
+    Output:
+    { "name": "Rohan", "lang": "mr", "state": "Maharashtra", "district": "Pune" }
+    
+    Example 2:
+    Transcript: "I am Priya from Karnataka, and my district is Visakhapatnam, please use English"
+    (Note: Visakhapatnam is not in Karnataka, so district should be null)
+    Output:
+    { "name": "Priya", "lang": "en", "state": "Karnataka", "district": null }
+
+    Only return the raw JSON object.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: prompt,
+            config: { responseMimeType: "application/json" }
+        });
+
+        const parsedJson = JSON.parse(response.text.trim());
+
+        // Validate the response from the AI
+        const name = typeof parsedJson.name === 'string' ? parsedJson.name : null;
+        const lang = typeof parsedJson.lang === 'string' && ['en', 'hi', 'mr', 'ml'].includes(parsedJson.lang) ? parsedJson.lang as LanguageCode : null;
+        const state = typeof parsedJson.state === 'string' && INDIAN_STATES_DISTRICTS[parsedJson.state] ? parsedJson.state : null;
+        let district = null;
+        if (state && typeof parsedJson.district === 'string' && INDIAN_STATES_DISTRICTS[state].includes(parsedJson.district)) {
+            district = parsedJson.district;
+        }
+
+        return { name, lang, state, district };
+
+    } catch (e) {
+        console.error("Failed to parse login details JSON from AI:", e);
+        return { name: null, lang: null, state: null, district: null };
+    }
 };

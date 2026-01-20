@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Message, LanguageCode, Theme, ChatMetadata, User } from './types';
+import type { Message, LanguageCode, Theme, ChatMetadata } from './types';
 import Header from './components/Header';
 import ContextSelector from './components/ContextSelector';
 import ChatInterface from './components/ChatInterface';
@@ -10,21 +11,27 @@ import LoginScreen from './components/LoginScreen';
 import useAuth from './hooks/useAuth';
 import { getAIResponse } from './services/geminiService';
 import { databaseService } from './services/databaseService';
-import { KERALA_DISTRICTS, COMMON_CROPS, TRANSLATIONS } from './constants';
+import { INDIAN_STATES_DISTRICTS, COMMON_CROPS, TRANSLATIONS } from './constants';
 import { offlineService } from './services/offlineService';
+import Preloader from './components/Preloader';
+import ConfirmationModal from './components/ConfirmationModal';
+import AboutModal from './components/AboutModal';
 
 const THEME_KEY = 'kissanMitraTheme';
 
 const App: React.FC = () => {
-  const { user, login, logout } = useAuth();
+  const { user, language: savedLanguage, state: savedState, district: savedDistrict, login, logout, setLanguage: setAuthLanguage, isLoading: isAuthLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
-  const [language, setLanguage] = useState<LanguageCode>('en');
+  const [language, setLanguage] = useState<LanguageCode>(savedLanguage);
+  
   const [context, setContext] = useState({
-    location: KERALA_DISTRICTS[0],
+    state: savedState || Object.keys(INDIAN_STATES_DISTRICTS)[0],
+    district: savedDistrict || INDIAN_STATES_DISTRICTS[savedState || Object.keys(INDIAN_STATES_DISTRICTS)[0]][0],
     crop: COMMON_CROPS[0],
   });
+
   const [theme, setTheme] = useState<Theme>(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
     if (savedTheme === 'light' || savedTheme === 'dark') {
@@ -33,13 +40,32 @@ const App: React.FC = () => {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     return prefersDark ? 'dark' : 'light';
   });
+
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const [chats, setChats] = useState<ChatMetadata[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
-  const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('chat');
+  const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('dashboard');
+  const [confirmation, setConfirmation] = useState<{
+    action: () => void;
+    title: string;
+    message: string;
+  } | null>(null);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
 
+  useEffect(() => {
+    setLanguage(savedLanguage);
+  }, [savedLanguage]);
+
+  useEffect(() => {
+    // Sync app context with any changes from auth (e.g., on initial load)
+    setContext(prev => ({
+        ...prev,
+        state: savedState || Object.keys(INDIAN_STATES_DISTRICTS)[0],
+        district: savedDistrict || INDIAN_STATES_DISTRICTS[savedState || Object.keys(INDIAN_STATES_DISTRICTS)[0]][0]
+    }));
+  }, [savedState, savedDistrict]);
 
   // Effect to manage online/offline status
   useEffect(() => {
@@ -76,19 +102,19 @@ const App: React.FC = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
-  const loadChats = async () => {
+  const loadChats = useCallback(async () => {
       const chatList = await databaseService.getAllChatMetadata();
       setChats(chatList);
-  };
+  }, []);
 
   useEffect(() => {
     if (user) {
         loadChats();
         if (!activeChatId) {
-            handleNewChat();
+            handleNewChat(false); // Don't switch view on initial load
         }
     }
-  }, [user]);
+  }, [user, activeChatId, loadChats]);
 
   useEffect(() => {
       if (activeChatId === null) {
@@ -105,6 +131,7 @@ const App: React.FC = () => {
 
   const handleLanguageChange = (newLanguage: LanguageCode) => {
     setLanguage(newLanguage);
+    setAuthLanguage(newLanguage);
   };
 
   const handleSendMessage = useCallback(async (inputText: string, imageFile: File | null) => {
@@ -120,7 +147,9 @@ const App: React.FC = () => {
       timestamp: new Date(),
     };
     
-    const updatedMessages = activeChatId === null ? [userMessage] : [...messages, userMessage];
+    // This logic ensures that if we are starting a new chat, the old "initial message" is cleared.
+    const currentMessages = activeChatId === null ? [] : messages;
+    const updatedMessages = [...currentMessages, userMessage];
     setMessages(updatedMessages);
 
     if (!navigator.onLine) {
@@ -146,10 +175,17 @@ const App: React.FC = () => {
         setActiveChatId(newChatId);
         currentChatId = newChatId;
         loadChats(); 
+    } else {
+        // For existing chats, just add the new user message to the database
+        const chatToSave = await databaseService.getChat(currentChatId);
+        if (chatToSave) {
+            chatToSave.messages.push(userMessage);
+            await databaseService.addOrUpdateChat(chatToSave);
+        }
     }
 
     try {
-      const stream = await getAIResponse(inputText, imageFile, context, language);
+      const stream = await getAIResponse(inputText, imageFile, { state: context.state, district: context.district, crop: context.crop }, language);
       setIsLoading(false);
       setIsStreaming(true);
 
@@ -160,7 +196,8 @@ const App: React.FC = () => {
         text: '',
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, initialModelMessage]);
+      // Use the updatedMessages which already includes the user's message
+      setMessages([...updatedMessages, initialModelMessage]);
 
       let aggregatedText = '';
       for await (const chunk of stream) {
@@ -173,10 +210,9 @@ const App: React.FC = () => {
       }
        
       const finalModelMessage = { ...initialModelMessage, text: aggregatedText };
-      const finalMessages = [...updatedMessages, finalModelMessage];
       const chatToSave = await databaseService.getChat(currentChatId!);
       if(chatToSave){
-          chatToSave.messages = finalMessages;
+          chatToSave.messages.push(finalModelMessage);
           await databaseService.addOrUpdateChat(chatToSave);
       }
 
@@ -193,12 +229,12 @@ const App: React.FC = () => {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [context, language, messages, activeChatId]);
+  }, [context, language, messages, activeChatId, loadChats]);
 
-  const handleNewChat = () => {
+  const handleNewChat = (switchView = true) => {
     setActiveChatId(null);
-    setMessages([]);
-    setCurrentView('chat');
+    setMessages([]); // Clears messages for the new chat
+    if (switchView) setCurrentView('chat');
     if (window.innerWidth <= 768) {
         setIsSidebarOpen(false);
     }
@@ -217,32 +253,52 @@ const App: React.FC = () => {
   };
 
   const handleDeleteChat = async (id: string) => {
-      if (window.confirm("Are you sure you want to delete this chat?")) {
-          await databaseService.deleteChat(id);
-          if (activeChatId === id) {
-              handleNewChat();
-          }
-          loadChats();
-      }
+    setConfirmation({
+        title: TRANSLATIONS.deleteChatConfirmTitle[language],
+        message: TRANSLATIONS.deleteChatConfirmMessage[language],
+        action: async () => {
+            await databaseService.deleteChat(id);
+            if (activeChatId === id) {
+                handleNewChat(false);
+                setCurrentView('dashboard');
+            }
+            loadChats();
+        }
+    });
   };
   
   const handleLogout = () => {
-      if (window.confirm("Are you sure you want to log out?")) {
-          logout();
-          setChats([]);
-          setActiveChatId(null);
-          setMessages([]);
-      }
+    setConfirmation({
+        title: TRANSLATIONS.logoutConfirmTitle[language],
+        message: TRANSLATIONS.logoutConfirmMessage[language],
+        action: () => {
+            logout();
+            setChats([]);
+            setActiveChatId(null);
+            setMessages([]);
+        }
+    });
   };
   
   const isNewChat = activeChatId === null;
 
+  if (isAuthLoading) {
+    return <Preloader />;
+  }
+
   if (!user) {
-    return <LoginScreen onLogin={login} language={language} onLanguageChange={handleLanguageChange} />;
+    return <LoginScreen onLogin={login} initialLanguage={language} />;
   }
 
   return (
     <div className="flex h-screen text-gray-800 dark:text-gray-200 bg-slate-50 dark:bg-[#0D1117]">
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-10 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
       <Sidebar 
           isOpen={isSidebarOpen}
           chats={chats}
@@ -255,6 +311,7 @@ const App: React.FC = () => {
           onSetView={setCurrentView}
           user={user}
           onLogout={handleLogout}
+          onOpenAboutModal={() => setIsAboutModalOpen(true)}
       />
       <div className="flex flex-col flex-1 h-screen">
         <Header 
@@ -272,9 +329,11 @@ const App: React.FC = () => {
           )}
           {currentView === 'chat' && (
             <ContextSelector
-              location={context.location}
+              state={context.state}
+              district={context.district}
               crop={context.crop}
-              onLocationChange={(loc) => setContext((prev) => ({ ...prev, location: loc }))}
+              onStateChange={(st) => setContext((prev) => ({ ...prev, state: st, district: INDIAN_STATES_DISTRICTS[st][0] }))}
+              onDistrictChange={(dist) => setContext((prev) => ({ ...prev, district: dist }))}
               onCropChange={(crp) => setContext((prev) => ({ ...prev, crop: crp }))}
               language={language}
             />
@@ -290,16 +349,30 @@ const App: React.FC = () => {
                     language={language}
                     isNewChat={isNewChat}
                     isOnline={isOnline}
-                    location={context.location}
+                    location={context.district}
+                    user={user}
                 />
             ) : (
-                <Dashboard language={language} location={context.location} />
+                <Dashboard language={language} location={context.district} />
             )}
            </div>
 
         </main>
         <Footer language={language} />
       </div>
+      <ConfirmationModal
+        isOpen={!!confirmation}
+        onClose={() => setConfirmation(null)}
+        onConfirm={confirmation?.action || (() => {})}
+        title={confirmation?.title || ''}
+        message={confirmation?.message || ''}
+        language={language}
+      />
+      <AboutModal 
+        isOpen={isAboutModalOpen}
+        onClose={() => setIsAboutModalOpen(false)}
+        language={language}
+      />
     </div>
   );
 };

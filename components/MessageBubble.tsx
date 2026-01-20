@@ -167,6 +167,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
     setFeedback(type);
     setFeedbackSent(true);
     setShowFeedbackConfirmation(true);
+
+    // This is where we send the data to our pipeline.
+    // In a real app, the '/api/feedback' endpoint would be an HTTP Cloud Function.
+    fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            messageId: message.id,
+            feedback: type === 'up' ? 'good' : 'bad',
+            // In a real app, you'd also send the chat ID
+        }),
+    }).catch(error => {
+        // If the API call fails, we can log it or handle it gracefully.
+        // For this demo, we'll just log it.
+        console.error("Failed to send feedback to pipeline:", error);
+    });
+
     setTimeout(() => {
       setShowFeedbackConfirmation(false);
     }, 2000);
@@ -199,7 +218,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
                   </div>
               </div>
           )}
-        <div className={`rounded-xl p-3 max-w-xl ${bubbleClasses} ${bubbleAlignment}`}>
+        <div className={`rounded-xl p-3 max-w-[85%] sm:max-w-md lg:max-w-xl ${bubbleClasses} ${bubbleAlignment}`}>
           {message.image && (
             <img
               src={message.image}
@@ -221,7 +240,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, language }) => {
               </div>
           )}
           {!isUser && message.text && (
-              <div className="self-end ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="self-end ml-2 flex items-center gap-1 opacity-100 md:opacity-0 group-hover:md:opacity-100 transition-opacity duration-300">
                    <button 
                       onClick={handleShare}
                       className="p-1.5 rounded-full text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"

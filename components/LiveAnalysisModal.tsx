@@ -1,33 +1,25 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality, Blob as GenaiBlob } from '@google/genai';
-import type { LanguageCode } from '../types';
-import { TRANSLATIONS } from '../constants';
-import BotIcon from './icons/BotIcon';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+// Fix: Remove non-existent 'LiveSession' from imports. The session type is not exported and should be inferred.
+import { GoogleGenAI, Modality, LiveServerMessage, Blob as GenAI_Blob } from '@google/genai';
+import type { LanguageCode, User } from '../types';
+import { TRANSLATIONS, LANGUAGES } from '../constants';
+import { analyticsService, CurrentWeather } from '../services/analyticsService';
 import UserIcon from './icons/UserIcon';
-import VideoCameraIcon from './icons/VideoCameraIcon';
-import CheckIcon from './icons/CheckIcon';
+import BotIcon from './icons/BotIcon';
 
-// --- Global AI Instance ---
-// The API key is now read from the global window object, where it's placed by config.js at runtime.
-declare global {
-    interface Window {
-        KISSAN_MITRA_API_KEY: string;
-    }
+// --- Gemini API Initialization ---
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+
+// --- Audio Encoding/Decoding Helpers (as per Gemini docs) ---
+function encode(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
-const apiKey = window.KISSAN_MITRA_API_KEY || process.env.API_KEY;
-const ai = new GoogleGenAI({ apiKey });
 
-
-// --- Icon Component ---
-const CameraSwitchIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20a8 8 0 008-8h-3a5 5 0 01-5 5v3zM4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z" />
-    </svg>
-);
-
-
-// --- Audio Utility Functions ---
 function decode(base64: string): Uint8Array {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -36,15 +28,6 @@ function decode(base64: string): Uint8Array {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes;
-}
-
-function encode(bytes: Uint8Array): string {
-  let binary = '';
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(i);
-  }
-  return btoa(binary);
 }
 
 async function decodeAudioData(
@@ -56,6 +39,7 @@ async function decodeAudioData(
   const dataInt16 = new Int16Array(data.buffer);
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
@@ -65,455 +49,365 @@ async function decodeAudioData(
   return buffer;
 }
 
-function createBlob(data: Float32Array): GenaiBlob {
-  const l = data.length;
-  const int16 = new Int16Array(l);
-  for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
-  }
-  return {
-    data: encode(new Uint8Array(int16.buffer)),
-    mimeType: 'audio/pcm;rate=16000',
-  };
-}
-
 const blobToBase64 = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
             const result = reader.result as string;
-            resolve(result.split(',')[1]);
+            const base64Data = result.split(',')[1];
+            if (base64Data) {
+                resolve(base64Data);
+            } else {
+                reject(new Error("Failed to read blob as base64"));
+            }
         };
-        reader.onerror = reject;
+        reader.onerror = (error) => reject(error);
         reader.readAsDataURL(blob);
     });
 };
 
-const getLiveSystemInstruction = (language: LanguageCode, location: string): string => {
-    return `You are a world-class agronomist, "Kissan Mitra," conducting a LIVE, REAL-TIME video field inspection. The user is a farmer in ${location}, Kerala. Your primary goal is SPEED and IMMEDIATE feedback. Your instructions are CRITICAL:
-1.  **REAL-TIME, PROACTIVE ANALYSIS:** Your analysis must be instant. Continuously analyze the video feed. DO NOT wait for the farmer. If you see a potential problem (yellow leaves, spots, pests), point it out IMMEDIATELY. Start with phrases like "I see..." or "That looks like...". Prioritize speed over long explanations.
-2.  **QUICK DIAGNOSIS & ACTIONABLE SOLUTIONS:** When you identify an issue, your response MUST be structured for fast delivery.
-    -   State the diagnosis clearly and concisely (e.g., "That's Leaf Spot disease on the banana plant.").
-    -   IMMEDIATELY provide brief, bullet-pointed solutions under two headers: **Organic Methods** and **Chemical Methods**. Be specific but quick. (e.g., "Organic: Neem oil spray. Chemical: Mancozeb fungicide.")
-    -   Conclude with a very brief safety warning: "Consult your Krishi Bhavan for chemical safety."
-3.  **INTERACTIVE & DIRECT:** This is a live call. Be direct. If the video is unclear, ask simple questions ("Closer, please." or "Show me the underside of the leaf."). Connect what you see and hear instantly.
-4.  **LANGUAGE & TONE:** You MUST speak in the language for code: ${language}. Your tone is helpful but URGENT and to the point, like an expert in the field with limited time. Short, clear sentences are essential.`;
-};
 
-
-// --- Component ---
 interface LiveAnalysisModalProps {
   isOpen: boolean;
   onClose: () => void;
   language: LanguageCode;
   location: string;
+  user: User;
 }
 
-type Status = 'idle' | 'connecting' | 'listening' | 'speaking' | 'analyzing' | 'error' | 'permission';
-type TranscriptEntry = { speaker: 'user' | 'model'; text: string };
+const FRAME_RATE = 30; // Increased from 20 for lower latency
+const JPEG_QUALITY = 0.6; // Keep quality low for faster uploads
 
-const LiveAnalysisModal: React.FC<LiveAnalysisModalProps> = ({ isOpen, onClose, language, location }) => {
+const getLiveSystemInstruction = (userName: string, location: string, language: LanguageCode, weather: CurrentWeather | null): string => {
+    const langName = LANGUAGES.find(l => l.code === language)?.name || 'English';
+    // The weather information is now a core part of the context.
+    const weatherContext = weather
+        ? `\n**CRITICAL CONTEXT: CURRENT WEATHER IN ${location.toUpperCase()}**\n- Conditions: ${weather.condition}\n- Temperature: ${weather.temp}\n- Humidity: ${weather.humidity}%\nThis environmental data is crucial. Your diagnosis MUST consider these conditions. For example, high humidity greatly increases the likelihood of fungal diseases.`
+        : '';
+
+    return `You are Agri-Intel, an expert AI field partner, in a live, real-time video call with a farmer named ${userName}. You are receiving a continuous video stream. Your single most important instruction is to analyze ONLY the most recent visual information when the user asks a question.${weatherContext}
+
+**--- CRITICAL OPERATING PROCEDURE ---**
+1.  **OBSERVE THE LIVE FEED:** You will receive a constant stream of video frames.
+2.  **ANALYZE THE CURRENT FRAME + WEATHER:** When a question is asked, your analysis MUST be based *exclusively* on what is visible in the video at that exact moment, COMBINED with the critical weather context provided above.
+3.  **FORGET PREVIOUS IMAGES:** You MUST completely discard any memory or context of what you saw in previous frames. If the user showed a red beetle, and now shows a green leafhopper and asks "what is this?", you must ONLY talk about the green leafhopper.
+4.  **RESPOND IMMEDIATELY:** Provide a concise diagnosis and actionable solution based on this fresh analysis.
+
+**Example of what to do:**
+- User shows a tomato leaf with yellow spots. Asks: "What's wrong with my plant?" (Weather is humid).
+- You see the yellow spots and consider the high humidity. You respond: "I see those yellow spots, ${userName}. Given the high humidity today, this is likely an early sign of fungal blight..."
+- User then moves the camera to a white, fuzzy bug on the stem. Asks: "Okay, and what is this thing?"
+- You see the white bug. You FORGET the yellow spots. You respond: "That appears to be a mealybug. Here is a simple way to get rid of them..."
+
+**Key Rules:**
+- **LANGUAGE:** Your entire spoken response MUST be in ${langName}.
+- **PERSONALITY:** Be a helpful, conversational partner. Address the user by name, ${userName}.
+- **SCOPE:** Your function is strictly limited to agricultural analysis of the live video.
+- **ORIGIN:** If asked, state you were developed by students from St. John College of Engineering and Management.`;
+}
+
+const LiveAnalysisModal: React.FC<LiveAnalysisModalProps> = ({ isOpen, onClose, language, location, user }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const frameTimeoutRef = useRef<number | null>(null);
+  
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [userTranscript, setUserTranscript] = useState('');
+  const [modelTranscript, setModelTranscript] = useState('');
+  
+  // Fix: Infer the promise type from the API method itself for better type safety and maintainability.
   const sessionPromiseRef = useRef<ReturnType<typeof ai.live.connect> | null>(null);
   
-  const [status, setStatus] = useState<Status>('idle');
-  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
-  const [transcriptLog, setTranscriptLog] = useState<TranscriptEntry[]>([]);
-  const [currentUserInput, setCurrentUserInput] = useState('');
-  const [currentModelOutput, setCurrentModelOutput] = useState('');
-
-  const streamRef = useRef<MediaStream | null>(null);
-  const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
-  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
-  const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const frameIntervalRef = useRef<number | null>(null);
-  
-  const isNewTurnByUserRef = useRef(true);
+  const nextStartTimeRef = useRef<number>(0);
+  const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
-  const nextStartTimeRef = useRef(0);
-  const sourcesRef = useRef(new Set<AudioBufferSourceNode>());
+  const cleanup = useCallback(() => {
+    console.log('Cleaning up live session resources...');
+    window.speechSynthesis.cancel(); // Stop any greeting speech
 
-  const stopSession = useCallback(() => {
+    if (frameTimeoutRef.current) {
+      window.clearTimeout(frameTimeoutRef.current);
+      frameTimeoutRef.current = null;
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    
     if (sessionPromiseRef.current) {
-      sessionPromiseRef.current.then(session => session.close()).catch(console.error);
-      sessionPromiseRef.current = null;
+        sessionPromiseRef.current.then(session => {
+            console.log("Closing session");
+            session.close();
+        }).catch(e => console.error("Error closing session:", e));
+        sessionPromiseRef.current = null;
     }
-    if (scriptProcessorRef.current) {
-      scriptProcessorRef.current.disconnect();
-      scriptProcessorRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
-    if (mediaStreamSourceRef.current) {
-      mediaStreamSourceRef.current.disconnect();
-      mediaStreamSourceRef.current = null;
-    }
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = null;
-    }
+
+    outputAudioContextRef.current?.close().catch(e => console.error("Error closing audio context:", e));
+    outputAudioContextRef.current = null;
+    audioSourcesRef.current.forEach(source => source.stop());
+    audioSourcesRef.current.clear();
+    nextStartTimeRef.current = 0;
+    
     setStatus('idle');
+    setUserTranscript('');
+    setModelTranscript('');
+
+  }, []);
+  
+  const handleClose = () => {
+      cleanup();
+      onClose();
+  };
+
+  const speakGreeting = useCallback((userName: string, lang: LanguageCode) => {
+    const greetingText = TRANSLATIONS.liveSessionGreeting[lang].replace('{name}', userName);
+    const utterance = new SpeechSynthesisUtterance(greetingText);
+    
+    const voices = window.speechSynthesis.getVoices();
+    const selectedVoice = voices.find(v => v.lang.startsWith(lang) && v.name.includes('Google')) || voices.find(v => v.lang.startsWith(lang) && v.localService) || voices.find(v => v.lang.startsWith(lang));
+    
+    if (selectedVoice) {
+        utterance.voice = selectedVoice;
+    }
+    
+    window.speechSynthesis.speak(utterance);
   }, []);
 
-  const startSession = useCallback(async () => {
-    if (status !== 'idle' || !streamRef.current) return;
+  useEffect(() => {
+    if (isOpen) {
+      startSession();
+    } else {
+      cleanup();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  const startSession = async () => {
+    if (status !== 'idle') return;
+
     setStatus('connecting');
-    isNewTurnByUserRef.current = true;
-    setCurrentUserInput('');
-    setCurrentModelOutput('');
-    setTranscriptLog([]);
+    outputAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
 
     try {
-      inputAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-      outputAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      // Fetch real-time weather data to ground the AI
+      const weatherData = analyticsService.getCurrentWeather(location);
 
-      sessionPromiseRef.current = ai.live.connect({
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      mediaStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      
+      const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        config: {
+          responseModalities: [Modality.AUDIO],
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          systemInstruction: getLiveSystemInstruction(user.name, location, language, weatherData),
+        },
         callbacks: {
           onopen: () => {
-            setStatus('analyzing'); // Start in analyzing mode
-            const stream = streamRef.current!;
-            const inputAudioContext = inputAudioContextRef.current!;
+            console.log('Session opened.');
+            setStatus('connected');
+            speakGreeting(user.name, language); // Speak personalized greeting
             
-            mediaStreamSourceRef.current = inputAudioContext.createMediaStreamSource(stream);
-            scriptProcessorRef.current = inputAudioContext.createScriptProcessor(4096, 1, 1);
-
-            scriptProcessorRef.current.onaudioprocess = (audioProcessingEvent) => {
-              const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-              const pcmBlob = createBlob(inputData);
-              sessionPromiseRef.current?.then((session) => {
-                session.sendRealtimeInput({ media: pcmBlob });
-              });
+            const inputAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const source = inputAudioContext.createMediaStreamSource(stream);
+            const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+            
+            scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+                const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+                const l = inputData.length;
+                const int16 = new Int16Array(l);
+                for (let i = 0; i < l; i++) {
+                    int16[i] = inputData[i] * 32768;
+                }
+                const pcmBlob: GenAI_Blob = {
+                    data: encode(new Uint8Array(int16.buffer)),
+                    mimeType: 'audio/pcm;rate=16000',
+                };
+                sessionPromiseRef.current?.then(session => {
+                    session.sendRealtimeInput({ media: pcmBlob });
+                });
             };
-            mediaStreamSourceRef.current.connect(scriptProcessorRef.current);
-            scriptProcessorRef.current.connect(inputAudioContext.destination);
+            source.connect(scriptProcessor);
+            scriptProcessor.connect(inputAudioContext.destination);
 
-            const canvasEl = canvasRef.current!;
-            const videoEl = videoRef.current!;
-            const ctx = canvasEl.getContext('2d')!;
-            frameIntervalRef.current = window.setInterval(() => {
-              canvasEl.width = videoEl.videoWidth;
-              canvasEl.height = videoEl.videoHeight;
-              ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight);
-              canvasEl.toBlob(
-                async (blob) => {
-                  if (blob) {
-                    const base64Data = await blobToBase64(blob);
-                    sessionPromiseRef.current?.then((session) => {
-                      session.sendRealtimeInput({ media: { data: base64Data, mimeType: 'image/jpeg' } });
-                    });
-                  }
-                }, 'image/jpeg', 0.5);
-            }, 200);
+            if (videoRef.current && canvasRef.current) {
+              const videoEl = videoRef.current;
+              
+              const startFrameCapture = () => {
+                  const canvasEl = canvasRef.current!;
+                  const ctx = canvasEl.getContext('2d');
+                  if (!ctx) return;
+
+                  const frameLoop = async () => {
+                      if (!mediaStreamRef.current) return; // Stop loop if stream is gone
+
+                      try {
+                          if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+                              canvasEl.width = videoEl.videoWidth;
+                              canvasEl.height = videoEl.videoHeight;
+                              ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight);
+                              
+                              const blob = await new Promise<Blob | null>(resolve => canvasEl.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
+
+                              if (blob && mediaStreamRef.current) {
+                                  const base64Data = await blobToBase64(blob);
+                                  const session = await sessionPromiseRef.current;
+                                  if (session && mediaStreamRef.current) {
+                                      session.sendRealtimeInput({
+                                          media: { data: base64Data, mimeType: 'image/jpeg' }
+                                      });
+                                  }
+                              }
+                          }
+                      } catch (e) {
+                          console.error("Error in frame capture loop:", e);
+                      } finally {
+                          // Schedule the next frame only after the current one is done processing
+                          if (mediaStreamRef.current) { // Only schedule if the stream is still active
+                              frameTimeoutRef.current = window.setTimeout(frameLoop, 1000 / FRAME_RATE);
+                          }
+                      }
+                  };
+
+                  // Start the loop
+                  frameLoop();
+              };
+              
+              // This is a critical fix: The 'playing' event ensures the video has valid dimensions
+              // and is actually rendering before we try to capture frames from it.
+              videoEl.addEventListener('playing', startFrameCapture, { once: true });
+              videoEl.play().catch(e => { // Autoplay might be blocked
+                  console.error("Video play failed:", e);
+                  // You might want to show a "Click to Start" button here as a fallback
+              });
+            }
+
           },
           onmessage: async (message: LiveServerMessage) => {
-            if (message.serverContent?.inputTranscription) {
-              setStatus('listening');
-              if (isNewTurnByUserRef.current) {
-                isNewTurnByUserRef.current = false;
-                // The user started speaking, so the AI's last turn is complete. Log it.
-                setCurrentModelOutput(prevOutput => {
-                    if(prevOutput) {
-                        setTranscriptLog(prevLog => [...prevLog, { speaker: 'model', text: prevOutput }]);
-                    }
-                    return ''; // Reset for the next turn
-                });
-              }
-              setCurrentUserInput(prev => prev + message.serverContent.inputTranscription.text);
-            }
-
             if (message.serverContent?.outputTranscription) {
-              setStatus('speaking');
-              // The AI started speaking, so the user's turn is complete. Log it.
-              setCurrentUserInput(prevInput => {
-                if(prevInput) {
-                    setTranscriptLog(prevLog => [...prevLog, { speaker: 'user', text: prevInput }]);
-                }
-                return ''; // Reset for the next turn
-              });
-              setCurrentModelOutput(prev => prev + message.serverContent.outputTranscription.text);
+              setModelTranscript(prev => prev + message.serverContent!.outputTranscription.text);
             }
-
+            if (message.serverContent?.inputTranscription) {
+              setUserTranscript(prev => prev + message.serverContent!.inputTranscription.text);
+            }
             if (message.serverContent?.turnComplete) {
-              isNewTurnByUserRef.current = true;
-              setStatus('analyzing');
+              setUserTranscript('');
+              setModelTranscript('');
             }
-
-            const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+            // FIX: Add optional chaining `?.` before accessing `.data`. This prevents a crash
+            // if the server sends a message part that doesn't contain `inlineData` (e.g., a text-only part).
+            const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64EncodedAudioString && outputAudioContextRef.current) {
-              const audioCtx = outputAudioContextRef.current;
-              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, audioCtx.currentTime);
-              const audioBuffer = await decodeAudioData(decode(base64EncodedAudioString), audioCtx, 24000, 1);
-              const source = audioCtx.createBufferSource();
-              source.buffer = audioBuffer;
-              source.connect(audioCtx.destination);
-              source.addEventListener('ended', () => sourcesRef.current.delete(source));
-              source.start(nextStartTimeRef.current);
-              nextStartTimeRef.current += audioBuffer.duration;
-              sourcesRef.current.add(source);
-            }
+                const outputAudioContext = outputAudioContextRef.current;
+                const nextStartTime = Math.max(nextStartTimeRef.current, outputAudioContext.currentTime);
+                nextStartTimeRef.current = nextStartTime;
 
+                const audioBuffer = await decodeAudioData(
+                    decode(base64EncodedAudioString),
+                    outputAudioContext,
+                    24000,
+                    1,
+                );
+                const source = outputAudioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(outputAudioContext.destination);
+                
+                const currentSources = audioSourcesRef.current;
+                source.addEventListener('ended', () => {
+                    currentSources.delete(source);
+                });
+                
+                source.start(nextStartTime);
+                nextStartTimeRef.current = nextStartTime + audioBuffer.duration;
+                currentSources.add(source);
+            }
             if (message.serverContent?.interrupted) {
-              for (const source of sourcesRef.current.values()) {
-                source.stop();
-                sourcesRef.current.delete(source);
-              }
-              nextStartTimeRef.current = 0;
+                audioSourcesRef.current.forEach(source => source.stop());
+                audioSourcesRef.current.clear();
+                nextStartTimeRef.current = 0;
             }
           },
           onerror: (e: ErrorEvent) => {
             console.error('Session error:', e);
             setStatus('error');
-            stopSession();
           },
-          onclose: () => {
-            stopSession();
+          onclose: (e: CloseEvent) => {
+            console.log('Session closed.', { reason: e.reason, code: e.code });
+            // This is a critical check for robustness. If the session closes but our cleanup
+            // function hasn't run (which nulls out mediaStreamRef), it means the closure
+            // was unexpected (e.g., network drop). We must inform the user.
+            if (mediaStreamRef.current) {
+                console.error('Session closed unexpectedly.');
+                setStatus('error');
+            }
           },
-        },
-        config: {
-          responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          systemInstruction: getLiveSystemInstruction(language, location),
         },
       });
-      await sessionPromiseRef.current;
-    } catch(err) {
-        console.error("Failed to start session:", err);
-        setStatus('error');
-        stopSession();
-    }
-  }, [language, location, status, stopSession]);
-  
-  const fullCleanup = useCallback(() => {
-    stopSession();
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    inputAudioContextRef.current?.close().catch(console.error);
-    outputAudioContextRef.current?.close().catch(console.error);
-    inputAudioContextRef.current = null;
-    outputAudioContextRef.current = null;
-    nextStartTimeRef.current = 0;
-    sourcesRef.current.forEach(source => source.stop());
-    sourcesRef.current.clear();
-  }, [stopSession]);
 
-  useEffect(() => {
-    const initMedia = async () => {
-      if (isOpen) {
-        setStatus('connecting');
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: cameraFacingMode } });
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(e => console.error("Video play failed:", e));
-          }
-          setStatus('idle');
-        } catch (err) {
-          console.error("Failed to get media devices:", err);
-          setStatus((err as Error).name === 'NotAllowedError' ? 'permission' : 'error');
-        }
-      } else {
-        fullCleanup();
-      }
-    };
-    initMedia();
-    return () => {
-      fullCleanup();
-    };
-  }, [isOpen, fullCleanup, cameraFacingMode]);
+      sessionPromiseRef.current = sessionPromise;
 
-  const handleCameraSwitch = async () => {
-    if (!streamRef.current || !navigator.mediaDevices?.enumerateDevices) return;
-
-    const videoDevices = (await navigator.mediaDevices.enumerateDevices()).filter(
-        (device) => device.kind === "videoinput"
-    );
-    if (videoDevices.length < 2) {
-        console.log("Only one camera found, cannot switch.");
-        return;
-    }
-
-    const newFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
-    
-    streamRef.current.getVideoTracks().forEach(track => track.stop());
-    
-    try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: { facingMode: newFacingMode }
-        });
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        
-        const oldVideoTrack = streamRef.current.getVideoTracks()[0];
-        if (oldVideoTrack) {
-          streamRef.current.removeTrack(oldVideoTrack);
-        }
-        streamRef.current.addTrack(newVideoTrack);
-        
-        if (videoRef.current) {
-            videoRef.current.srcObject = streamRef.current;
-        }
-
-        setCameraFacingMode(newFacingMode);
-    } catch (err) {
-        console.error("Failed to switch camera:", err);
+    } catch (error) {
+      console.error('Failed to start live session:', error);
+      setStatus('error');
+      cleanup();
     }
   };
 
-  const handleToggleSession = () => {
-    if (status === 'idle') {
-      startSession();
-    } else {
-      stopSession();
-    }
-  };
-
-  const handleClose = () => {
-    fullCleanup();
-    onClose();
-  };
-  
-  const StatusIndicator = () => {
-    const statusMap = {
-        idle: { text: TRANSLATIONS.statusIdle[language], color: 'bg-gray-400' },
-        connecting: { text: TRANSLATIONS.statusConnecting[language], color: 'bg-yellow-400 animate-pulse' },
-        listening: { text: TRANSLATIONS.statusListening[language], color: 'bg-green-400 animate-pulse' },
-        speaking: { text: TRANSLATIONS.statusSpeaking[language], color: 'bg-blue-400 animate-pulse' },
-        analyzing: { text: 'Analyzing...', color: 'bg-purple-400 animate-pulse-slow' },
-        error: { text: TRANSLATIONS.statusError[language], color: 'bg-red-500' },
-        permission: { text: TRANSLATIONS.statusPermission[language], color: 'bg-red-500' },
-    };
-    const { text, color } = statusMap[status];
-    return (
-      <div className="flex items-center justify-center gap-2 text-sm text-white font-medium p-2 bg-black/40 backdrop-blur-sm rounded-full">
-          <span className={`w-3 h-3 rounded-full ${color}`}></span>
-          <span>{text}</span>
-      </div>
-    );
-  };
-  
-  const renderOverlayContent = () => {
-    if (status !== 'idle') return null;
-    
-    const tips = [
-        "Ensure good lighting on your crop.",
-        "Get close to the plant for detailed analysis.",
-        "Speak clearly into the microphone."
-    ];
-
-    return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <VideoCameraIcon className="w-16 h-16 mb-4 text-gray-400" />
-            <h3 className="text-2xl font-bold">{TRANSLATIONS.liveSessionTitle[language]}</h3>
-            <div className="mt-4 text-left text-gray-300 text-sm space-y-2 max-w-sm">
-                <p className="font-semibold text-center mb-2">For best results:</p>
-                {tips.map((tip, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                        <CheckIcon />
-                        <span>{tip}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-  };
-
-  if (!isOpen) return null;
-
-  const isSessionActive = status !== 'idle' && status !== 'connecting' && status !== 'permission' && status !== 'error';
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0D1117]" aria-modal="true" role="dialog">
-      <div className="flex flex-col h-full w-full text-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-        <header className="flex-shrink-0 flex items-center justify-between p-4">
-          <h2 className="text-lg font-bold">{TRANSLATIONS.liveSessionTitle[language]}</h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-        </header>
-
-        <main className="flex-1 flex flex-col p-4 pt-0 gap-4 overflow-hidden">
-            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-lg">
-                <video ref={videoRef} autoPlay muted playsInline className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`}></video>
-                <canvas ref={canvasRef} className="hidden"></canvas>
-                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                    {renderOverlayContent()}
-                </div>
-                {isSessionActive && (
-                  <div className="absolute top-3 left-3 right-3 flex justify-center">
-                      <StatusIndicator />
-                  </div>
-                )}
-                <div className="absolute bottom-3 right-3">
-                    <button 
-                        onClick={handleCameraSwitch} 
-                        className="p-3 bg-black/40 backdrop-blur-sm rounded-full text-white hover:bg-black/60 transition-colors"
-                        title="Switch camera"
-                        aria-label="Switch camera"
-                    >
-                        <CameraSwitchIcon />
-                    </button>
-                </div>
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={handleClose}>
+          <div className="bg-white dark:bg-[#0D1117] rounded-2xl w-full max-w-4xl h-[90vh] shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">{TRANSLATIONS.liveSession[language]}</h2>
+                <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl font-bold">&times;</button>
             </div>
             
-            <div className="flex-1 bg-[#161B22] border border-gray-700 rounded-2xl p-4 overflow-y-auto space-y-4 text-sm">
-                {!isSessionActive && status === 'idle' ? (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    <p>Conversation log will appear here.</p>
-                  </div>
-                ) : (
-                  <>
-                    {transcriptLog.map((entry, index) => (
-                      <div key={index} className={`flex items-start gap-3 ${entry.speaker === 'model' ? 'text-green-300' : 'text-gray-300'}`}>
-                          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${entry.speaker === 'model' ? 'bg-green-600' : 'bg-gray-600'}`}>
-                            {entry.speaker === 'model' ? <BotIcon /> : <UserIcon />}
-                          </div>
-                          <p className="flex-1 pt-1.5">{entry.text}</p>
-                      </div>
-                    ))}
-                    {currentUserInput && (
-                      <div className="flex items-start gap-3 text-gray-200">
-                          <div className="relative flex-shrink-0">
-                              <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center"><UserIcon /></div>
-                              {status === 'listening' && <span className="absolute top-0 left-0 w-full h-full rounded-full bg-green-500 opacity-75 animate-ping"></span>}
-                          </div>
-                          <p className="flex-1 pt-1.5">{currentUserInput}...</p>
-                      </div>
-                    )}
-                    {currentModelOutput && (
-                      <div className="flex items-start gap-3 text-green-200">
-                           <div className="relative flex-shrink-0">
-                              <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center"><BotIcon /></div>
-                              {status === 'speaking' && <span className="absolute top-0 left-0 w-full h-full rounded-full bg-blue-500 opacity-75 animate-ping"></span>}
-                          </div>
-                          <p className="flex-1 pt-1.5">{currentModelOutput}...</p>
-                      </div>
-                    )}
-                  </>
+            <div className="flex-1 relative bg-black">
+                <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="absolute bottom-4 left-4 right-4 bg-black/50 p-3 rounded-lg text-white text-sm backdrop-blur-md">
+                    <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center"><UserIcon /></div>
+                        <p className="flex-1 min-h-[1.25rem]">{userTranscript}</p>
+                    </div>
+                    <div className="flex items-start gap-3 mt-2">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center"><BotIcon /></div>
+                        <p className="flex-1 min-h-[1.25rem] font-medium">{modelTranscript}</p>
+                    </div>
+                </div>
+
+                {status === 'connecting' && (
+                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white">
+                        <div className="w-8 h-8 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+                        <p className="mt-4">Connecting...</p>
+                    </div>
+                )}
+                 {status === 'error' && (
+                    <div className="absolute inset-0 bg-red-900/80 flex flex-col items-center justify-center text-white p-4">
+                        <p className="font-semibold">Connection Error</p>
+                        <p className="text-sm text-center mt-2">Could not establish a live session. Please check your camera/microphone permissions and try again.</p>
+                        <button onClick={handleClose} className="mt-4 px-4 py-2 bg-white text-red-800 rounded-lg text-sm">Close</button>
+                    </div>
                 )}
             </div>
-        </main>
-        
-        <footer className="flex-shrink-0 p-4 pt-0">
-            <button
-                onClick={handleToggleSession}
-                disabled={status === 'connecting' || status === 'permission' || status === 'error'}
-                className={`w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 ${
-                    isSessionActive 
-                    ? 'bg-gradient-to-br from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 shadow-lg shadow-red-500/20' 
-                    : 'bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg shadow-green-500/20'
-                }`}
-            >
-                {isSessionActive ? TRANSLATIONS.stopSession[language] : TRANSLATIONS.startSession[language]}
-            </button>
-        </footer>
-      </div>
-    </div>
+            
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

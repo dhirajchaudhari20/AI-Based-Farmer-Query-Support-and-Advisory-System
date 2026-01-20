@@ -1,6 +1,6 @@
 // Fix: Remove local type definitions and import centralized types to resolve conflicts.
 import React, { useState, useRef, useEffect } from 'react';
-import type { Message, LanguageCode, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '../types';
+import type { Message, LanguageCode, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent, User } from '../types';
 import { TRANSLATIONS } from '../constants';
 import MessageBubble from './MessageBubble';
 import SendIcon from './icons/SendIcon';
@@ -21,6 +21,7 @@ interface ChatInterfaceProps {
   isNewChat: boolean;
   isOnline: boolean;
   location: string;
+  user: User;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -32,6 +33,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   isNewChat,
   isOnline,
   location,
+  user
 }) => {
   const [inputText, setInputText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -77,23 +79,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     
     const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = true;
+    recognition.continuous = false; // Stop recording automatically after a pause
     recognition.interimResults = true;
     recognition.lang = language;
     
+    // A simplified and more robust handler for processing speech results.
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-
-      for (let i = 0; i < event.results.length; i++) {
-        const transcriptChunk = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcriptChunk;
-        } else {
-          interimTranscript += transcriptChunk;
-        }
-      }
-      setInputText(finalTranscript + interimTranscript);
+      const transcript = Array.from(event.results)
+        .map(result => result[0].transcript)
+        .join('');
+      setInputText(transcript);
     };
 
     recognition.onend = () => {
@@ -198,9 +193,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </button>
           </div>
         )}
-        <div className="relative flex items-end bg-[#161B22] rounded-2xl p-2 shadow-lg transition-shadow duration-300 focus-within:ring-2 focus-within:ring-green-500 border border-gray-700">
-          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-400 hover:text-green-400 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline}>
-              <AttachmentIcon />
+        <div className="relative flex items-end bg-white dark:bg-[#161B22] rounded-2xl p-2 shadow-lg transition-shadow duration-300 focus-within:ring-2 focus-within:ring-green-500 border border-gray-200 dark:border-gray-700">
+          <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline}>
+              <AttachmentIcon className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
           <input
             type="file"
@@ -213,19 +208,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <button 
               onClick={handleMicClick}
               title={isRecording ? TRANSLATIONS.stopRecording[language] : TRANSLATIONS.startRecording[language]}
-              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-400 hover:text-green-400'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400'} disabled:opacity-50 disabled:cursor-not-allowed`}
               disabled={!isOnline}
           >
-              <MicrophoneIcon />
+              <MicrophoneIcon className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
            <button 
               onClick={() => setIsLiveModalOpen(true)}
               title={TRANSLATIONS.liveSession[language]}
               aria-label={TRANSLATIONS.liveSession[language]}
-              className="p-2 rounded-full text-gray-400 hover:text-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!isOnline}
           >
-              <VideoCameraIcon />
+              <VideoCameraIcon className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
 
           <textarea
@@ -234,7 +229,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={isOnline ? TRANSLATIONS.sendMessagePlaceholder[language] : "You are offline. Type a message to send later."}
-            className="flex-1 bg-transparent text-gray-200 px-2 py-2 border-none resize-none focus:outline-none focus:ring-0 placeholder-gray-500"
+            className="flex-1 bg-transparent text-gray-800 dark:text-gray-200 px-2 py-2 border-none resize-none focus:outline-none focus:ring-0 placeholder-gray-400 dark:placeholder-gray-500"
             rows={1}
             disabled={!isOnline}
           />
@@ -242,7 +237,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <button
             onClick={handleSend}
             disabled={!canSendMessage}
-            className="bg-[#2D3340] text-white w-10 h-10 flex items-center justify-center rounded-md hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg disabled:shadow-none"
+            className="bg-gray-200 dark:bg-[#2D3340] text-gray-700 dark:text-white w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-md hover:bg-green-500 hover:text-white disabled:bg-gray-100 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-lg disabled:shadow-none"
             aria-label="Send message"
           >
             <SendIcon />
@@ -254,6 +249,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         onClose={() => setIsLiveModalOpen(false)}
         language={language}
         location={location}
+        user={user}
       />
     </div>
   );

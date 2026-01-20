@@ -8,6 +8,7 @@ import DashboardIcon from './icons/DashboardIcon';
 import ChatBubbleIcon from './icons/ChatBubbleIcon';
 import UserCircleIcon from './icons/UserCircleIcon';
 import LogoutIcon from './icons/LogoutIcon';
+import InformationCircleIcon from './icons/InformationCircleIcon';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ interface SidebarProps {
   onSetView: (view: 'chat' | 'dashboard') => void;
   user: User;
   onLogout: () => void;
+  onOpenAboutModal: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -35,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSetView,
   user,
   onLogout,
+  onOpenAboutModal,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -122,22 +125,31 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* User Profile Section */}
       <div className="p-4 border-t border-slate-200 dark:border-[#2D3340]">
         <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-green-200 dark:bg-green-900 flex items-center justify-center text-green-700 dark:text-green-200 font-bold">
+            <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-green-200 dark:bg-green-900 flex items-center justify-center text-green-700 dark:text-green-200 font-bold flex-shrink-0">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{user.name}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{TRANSLATIONS.welcomeBack[language]}</p>
                 </div>
             </div>
-            <button 
-                onClick={onLogout}
-                title={TRANSLATIONS.logoutButton[language]}
-                className="p-2 text-gray-500 rounded-md hover:bg-slate-200 dark:text-gray-400 dark:hover:bg-gray-700"
-            >
-                <LogoutIcon />
-            </button>
+            <div className="flex items-center flex-shrink-0">
+                <button 
+                    onClick={onOpenAboutModal}
+                    title="About Agri-Intel"
+                    className="p-2 text-gray-500 rounded-md hover:bg-slate-200 dark:text-gray-400 dark:hover:bg-gray-700"
+                >
+                    <InformationCircleIcon />
+                </button>
+                <button 
+                    onClick={onLogout}
+                    title={TRANSLATIONS.logoutButton[language]}
+                    className="p-2 text-gray-500 rounded-md hover:bg-slate-200 dark:text-gray-400 dark:hover:bg-gray-700"
+                >
+                    <LogoutIcon />
+                </button>
+            </div>
         </div>
       </div>
 

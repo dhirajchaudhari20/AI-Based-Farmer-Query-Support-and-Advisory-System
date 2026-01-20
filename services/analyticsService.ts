@@ -1,11 +1,9 @@
-// This service simulates a big data analytics backend.
-// It generates pseudo-random but deterministic data based on the district name.
-// This ensures that for the same district, we always get the same data, but
-// different districts will have different data, creating a realistic simulation.
+import type { LanguageCode } from '../types';
 
-// A simple hashing function to convert a string (district name) into a number.
+// A simple hashing function to create deterministic "randomness" from the location string
 const simpleHash = (str: string): number => {
   let hash = 0;
+  if (!str) return hash;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = (hash << 5) - hash + char;
@@ -14,84 +12,145 @@ const simpleHash = (str: string): number => {
   return Math.abs(hash);
 };
 
-// A pseudo-random number generator that can be seeded.
-const seededRandom = (seed: number) => {
-  let x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
+export interface SoilHealth {
+  n: { value: number; status: 'optimal' | 'low' | 'high' };
+  p: { value: number; status: 'optimal' | 'low' | 'high' };
+  k: { value: number; status: 'optimal' | 'low' | 'high' };
+  ph: number;
+}
+
+export interface ResourceInsights {
+    rainfall: { deviation: number };
+    market: { forecast: 'strong' | 'stable' | 'weak' };
+}
+
+export interface MarketTrend {
+    month: string;
+    price: number;
+}
+
+export interface YieldPrediction {
+    crop: string;
+    predictedYield: number; // in tons/hectare
+    confidence: number; // percentage
+}
+
+export interface PestPrediction {
+    pestName: string;
+    probability: number; // percentage
+}
+
+export interface PlantingAdvice {
+  recommendedCrop: string;
+  reason: string;
+}
+
+export interface DistrictBenchmark {
+    rank: string; // e.g., 'Top 25%'
+    note: string;
+}
+
+export interface CurrentWeather {
+    temp: string;
+    condition: string;
+    humidity: number;
+}
+
+export interface DashboardAnalytics {
+  weather: { temp: string; condition: 'Partly Cloudy' | 'Sunny' | 'Light Showers' | 'Clear Skies' | 'Humid' };
+  pestAlerts: { level: 'low' | 'medium' | 'high'; message: string };
+  soilHealth: SoilHealth;
+  resourceInsights: ResourceInsights;
+  marketTrends: { crop: string; data: MarketTrend[] };
+  yieldPrediction: YieldPrediction;
+  plantingAdvisor: PlantingAdvice;
+  districtBenchmark: DistrictBenchmark;
+  pestOutbreakPrediction: PestPrediction;
+}
+
+const getStatus = (value: number, optimal: number, range: number): 'optimal' | 'low' | 'high' => {
+    if (value > optimal + range) return 'high';
+    if (value < optimal - range) return 'low';
+    return 'optimal';
 };
 
-export interface CropPerformance {
-  name: string;
-  yield: number; // in Tonnes per Hectare
-  trend: 'up' | 'down';
-}
-
-export interface PestAlert {
-  pest: string;
-  crop: string;
-  severity: 'High' | 'Medium' | 'Low';
-}
-
-export interface AnalyticsData {
-  cropPerformance: CropPerformance[];
-  pestAlerts: PestAlert[];
-  recommendations: string[];
-}
-
-const ALL_CROPS = ["Paddy", "Coconut", "Rubber", "Banana", "Pepper", "Ginger"];
-const ALL_PESTS = ["Leaf Spot", "Root Rot", "Stem Borer", "Mealybug", "Fruit Fly"];
-const SEVERITIES: ('High' | 'Medium' | 'Low')[] = ['High', 'Medium', 'Low'];
-
-export const getDistrictAnalytics = (district: string): AnalyticsData => {
-  const seed = simpleHash(district);
-  const random = (offset: number) => seededRandom(seed + offset);
-
-  // Generate Crop Performance data
-  const cropPerformance: CropPerformance[] = ALL_CROPS.slice(0, 4).map((crop, i) => {
-    const yieldValue = parseFloat((2.5 + random(i) * 2.5).toFixed(1)); // Yield between 2.5 and 5.0
+// This service simulates fetching data from a Big Data backend.
+export const analyticsService = {
+  getCurrentWeather: (location: string): CurrentWeather => {
+    const hash = simpleHash(location);
+    const conditions = ['Partly Cloudy', 'Sunny', 'Light Showers', 'Clear Skies', 'Humid'] as const;
     return {
-      name: crop,
-      yield: yieldValue,
-      trend: random(i + 10) > 0.5 ? 'up' : 'down',
+      temp: `${28 + (hash % 8)}°C`,
+      condition: conditions[hash % conditions.length],
+      humidity: 60 + (hash % 25),
     };
-  });
+  },
 
-  // Generate Pest Alert data
-  const pestAlerts: PestAlert[] = [];
-  const usedPests = new Set<string>();
-  for (let i = 0; i < 3; i++) {
-    let pest = ALL_PESTS[Math.floor(random(i + 20) * ALL_PESTS.length)];
-    // Ensure unique pests
-    while(usedPests.has(pest)) {
-        pest = ALL_PESTS[Math.floor(random(i + 20 + pest.length) * ALL_PESTS.length)];
-    }
-    usedPests.add(pest);
+  getDashboardAnalytics: (location: string): DashboardAnalytics => {
+    const hash = simpleHash(location);
 
-    const crop = ALL_CROPS[Math.floor(random(i + 30) * ALL_CROPS.length)];
-    const severity = SEVERITIES[Math.floor(random(i + 40) * SEVERITIES.length)];
-    pestAlerts.push({ pest, crop, severity });
-  }
+    const crops = ['Tomato', 'Onion', 'Wheat', 'Sugarcane', 'Cotton', 'Soybean'];
+    const pests = ['Aphids', 'Bollworm', 'Whitefly', 'Stem Borer', 'Thrips'];
+    
+    // Generate Market Trends data
+    const trendData: MarketTrend[] = Array.from({ length: 6 }, (_, i) => {
+        const priceFluctuation = (simpleHash(`${location}-month-${i}`) % 20) - 10;
+        return {
+            month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'][i],
+            price: 180 + (i * 5) + priceFluctuation,
+        };
+    });
 
-  // Generate dynamic recommendations based on the data
-  const recommendations: string[] = [];
-  const highAlert = pestAlerts.find(p => p.severity === 'High');
-  if (highAlert) {
-    recommendations.push(`High alert for ${highAlert.pest} on ${highAlert.crop} crops. Recommend immediate inspection.`);
-  }
-
-  const highYieldCrop = cropPerformance.reduce((prev, current) => (prev.yield > current.yield) ? prev : current);
-  recommendations.push(`Favorable conditions for ${highYieldCrop.name} cultivation noted. Consider expanding.`);
-
-  const lowYieldCrop = cropPerformance.find(c => c.trend === 'down');
-  if (lowYieldCrop) {
-    recommendations.push(`Monitor ${lowYieldCrop.name} crops closely for potential issues due to declining yield trends.`);
-  } else {
-    recommendations.push("Market prices are stable. Plan harvest and sales accordingly.")
-  }
-
-  return {
-    cropPerformance,
-    pestAlerts,
-    recommendations,
-  };
+    return {
+      weather: {
+        temp: `${28 + (hash % 8)}°C`,
+        // FIX: Add `as const` to the array to ensure TypeScript infers a tuple of literal types, not `string[]`. This resolves the type mismatch with the `DashboardAnalytics` interface.
+        condition: (['Partly Cloudy', 'Sunny', 'Light Showers', 'Clear Skies', 'Humid'] as const)[hash % 5],
+      },
+      pestAlerts: {
+        level: ['low', 'medium', 'high'][hash % 3] as 'low' | 'medium' | 'high',
+        message: [
+            "Monitor your wheat crop for Yellow Rust disease.",
+            "High probability of locust swarms detected in western regions.",
+            "Increased sightings of the Fall Armyworm pest in maize fields.",
+        ][hash % 3],
+      },
+      soilHealth: {
+        n: { value: 120 + ((hash % 50) - 25), status: getStatus(120 + ((hash % 50) - 25), 130, 10) },
+        p: { value: 45 + ((hash % 20) - 10), status: getStatus(45 + ((hash % 20) - 10), 50, 5) },
+        k: { value: 60 + ((hash % 20) - 10), status: getStatus(60 + ((hash % 20) - 10), 65, 5) },
+        ph: parseFloat((6.2 + (hash % 15) / 10).toFixed(1)),
+      },
+      resourceInsights: {
+          rainfall: { deviation: (hash % 30) - 15 },
+          market: { forecast: ['strong', 'stable', 'weak'][hash % 3] as 'strong' | 'stable' | 'weak' }
+      },
+      marketTrends: {
+          crop: `${crops[(hash + 1) % crops.length]}`,
+          data: trendData
+      },
+      yieldPrediction: {
+          crop: crops[hash % crops.length],
+          predictedYield: parseFloat((4.5 + (hash % 20) / 10).toFixed(1)),
+          confidence: 85 + (hash % 10)
+      },
+      plantingAdvisor: {
+        recommendedCrop: ['Sugarcane', 'Cotton', 'Soybean', 'Maize'][hash % 4],
+        reason: [
+            'High market demand is forecasted and current soil moisture is optimal.',
+            'Favorable long-range weather predictions and stable market prices.',
+            'Excellent for crop rotation to improve soil nitrogen levels for the following season.',
+            'Short growth cycle and rising demand from the local poultry feed industry.'
+        ][hash % 4],
+      },
+      districtBenchmark: {
+          rank: ['Top 10%', 'Top 25%', 'Top 50%', 'Average'][hash % 4],
+          note: 'Based on last season\'s yield data for your primary crop.'
+      },
+      pestOutbreakPrediction: {
+          pestName: pests[hash % pests.length],
+          probability: 60 + (hash % 35)
+      }
+    };
+  },
 };
