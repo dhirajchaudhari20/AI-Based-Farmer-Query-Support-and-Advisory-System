@@ -4,7 +4,7 @@ import { LANGUAGES, INDIAN_STATES_DISTRICTS } from '../constants';
 
 
 // FIX: Ensure API_KEY is accessed from environment variables as per guidelines.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+// const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string }); // Moved to getGenAI
 
 // Helper function to convert a File object to a GoogleGenerativeAI.Part object
 const fileToGenerativePart = async (file: File) => {
@@ -69,6 +69,15 @@ Guidelines for your responses:
     2. [Step 2]`;
 };
 
+const getGenAI = () => {
+  const apiKey = (window as any).KISSAN_MITRA_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY || process.env.API_KEY || '';
+  if (!apiKey) {
+    console.error("API Key is missing!");
+    throw new Error("An API Key must be set. Please check your configuration.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
 export const getAIResponse = async (
   inputText: string,
   imageFile: File | null,
@@ -77,9 +86,10 @@ export const getAIResponse = async (
 ) => {
   // FIX: Use the recommended model for multimodal tasks.
   const model = 'gemini-2.5-flash';
-  
+  const ai = getGenAI();
+
   const systemInstruction = getSystemInstruction(context, language);
-  
+
   const textPart = { text: `User's question: "${inputText}"` };
   const contentParts = [];
 
@@ -101,18 +111,18 @@ export const getAIResponse = async (
   return stream;
 };
 
-export const parseLoginDetailsFromSpeech = async (transcript: string): Promise<{name: string | null, lang: LanguageCode | null, state: string | null, district: string | null}> => {
-    const model = 'gemini-2.5-flash';
-    const allLangs = LANGUAGES.map(l => l.name).join(', ');
-    const allStates = Object.keys(INDIAN_STATES_DISTRICTS).join(', ');
-    const langCodeMap: Record<string, LanguageCode> = {
-        'English': 'en',
-        'Hindi': 'hi',
-        'Marathi': 'mr',
-        'Malayalam': 'ml'
-    };
+export const parseLoginDetailsFromSpeech = async (transcript: string): Promise<{ name: string | null, lang: LanguageCode | null, state: string | null, district: string | null }> => {
+  const model = 'gemini-2.5-flash';
+  const allLangs = LANGUAGES.map(l => l.name).join(', ');
+  const allStates = Object.keys(INDIAN_STATES_DISTRICTS).join(', ');
+  const langCodeMap: Record<string, LanguageCode> = {
+    'English': 'en',
+    'Hindi': 'hi',
+    'Marathi': 'mr',
+    'Malayalam': 'ml'
+  };
 
-    const prompt = `You are an expert system for parsing user login details from a single, potentially multi-lingual sentence. The user's spoken transcript is: "${transcript}".
+  const prompt = `You are an expert system for parsing user login details from a single, potentially multi-lingual sentence. The user's spoken transcript is: "${transcript}".
     You must extract the following four entities:
     1.  **name**: The user's full name.
     2.  **language**: The user's preferred language for the app. It MUST be one of these: [${allLangs}].
@@ -137,28 +147,29 @@ export const parseLoginDetailsFromSpeech = async (transcript: string): Promise<{
 
     Only return the raw JSON object.`;
 
-    try {
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
-        });
+  try {
+    const ai = getGenAI();
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
 
-        const parsedJson = JSON.parse(response.text.trim());
+    const parsedJson = JSON.parse(response.text.trim());
 
-        // Validate the response from the AI
-        const name = typeof parsedJson.name === 'string' ? parsedJson.name : null;
-        const lang = typeof parsedJson.lang === 'string' && ['en', 'hi', 'mr', 'ml'].includes(parsedJson.lang) ? parsedJson.lang as LanguageCode : null;
-        const state = typeof parsedJson.state === 'string' && INDIAN_STATES_DISTRICTS[parsedJson.state] ? parsedJson.state : null;
-        let district = null;
-        if (state && typeof parsedJson.district === 'string' && INDIAN_STATES_DISTRICTS[state].includes(parsedJson.district)) {
-            district = parsedJson.district;
-        }
-
-        return { name, lang, state, district };
-
-    } catch (e) {
-        console.error("Failed to parse login details JSON from AI:", e);
-        return { name: null, lang: null, state: null, district: null };
+    // Validate the response from the AI
+    const name = typeof parsedJson.name === 'string' ? parsedJson.name : null;
+    const lang = typeof parsedJson.lang === 'string' && ['en', 'hi', 'mr', 'ml'].includes(parsedJson.lang) ? parsedJson.lang as LanguageCode : null;
+    const state = typeof parsedJson.state === 'string' && INDIAN_STATES_DISTRICTS[parsedJson.state] ? parsedJson.state : null;
+    let district = null;
+    if (state && typeof parsedJson.district === 'string' && INDIAN_STATES_DISTRICTS[state].includes(parsedJson.district)) {
+      district = parsedJson.district;
     }
+
+    return { name, lang, state, district };
+
+  } catch (e) {
+    console.error("Failed to parse login details JSON from AI:", e);
+    return { name: null, lang: null, state: null, district: null };
+  }
 };
