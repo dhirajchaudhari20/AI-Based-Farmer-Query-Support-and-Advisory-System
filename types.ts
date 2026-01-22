@@ -61,7 +61,7 @@ export interface SpeechRecognitionAlternative {
   readonly confidence: number;
 }
 export interface SpeechRecognitionErrorEvent extends Event {
-    readonly error: string;
+  readonly error: string;
 }
 export interface SpeechRecognition extends EventTarget {
   continuous: boolean;
@@ -69,6 +69,7 @@ export interface SpeechRecognition extends EventTarget {
   lang: string;
   start(): void;
   stop(): void;
+  abort(): void;
   onresult: (event: SpeechRecognitionEvent) => void;
   onerror: (event: SpeechRecognitionErrorEvent) => void;
   onend: () => void;

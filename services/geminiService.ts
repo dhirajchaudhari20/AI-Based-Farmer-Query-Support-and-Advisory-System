@@ -69,7 +69,7 @@ Guidelines for your responses:
     2. [Step 2]`;
 };
 
-const getGenAI = () => {
+export const getGenAI = () => {
   const apiKey = (window as any).KISSAN_MITRA_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY || process.env.API_KEY || '';
   if (!apiKey) {
     console.error("API Key is missing!");

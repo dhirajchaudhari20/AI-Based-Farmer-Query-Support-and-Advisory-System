@@ -1,7 +1,6 @@
-// Fix: Remove local type definitions and import centralized types to resolve conflicts.
 import React, { useState, useRef, useEffect } from 'react';
-import type { Message, LanguageCode, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent, User } from '../types';
-import { TRANSLATIONS } from '../constants';
+import type { Message, LanguageCode, User } from '../types';
+import { TRANSLATIONS, LANGUAGE_LOCALES } from '../constants';
 import MessageBubble from './MessageBubble';
 import SendIcon from './icons/SendIcon';
 import AttachmentIcon from './icons/AttachmentIcon';
@@ -11,6 +10,7 @@ import SkeletonLoader from './loaders/SkeletonLoader';
 import TypingIndicator from './loaders/TypingIndicator';
 import VideoCameraIcon from './icons/VideoCameraIcon';
 import LiveAnalysisModal from './LiveAnalysisModal';
+import useSpeechRecognition from '../hooks/useSpeechRecognition';
 
 interface ChatInterfaceProps {
   messages: Message[];
@@ -38,13 +38,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [inputText, setInputText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
   const [isLiveModalOpen, setIsLiveModalOpen] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleSpeechResult = (text: string) => {
+    setInputText(prev => (prev ? prev + ' ' : '') + text);
+  };
+
+  const { isListening, startListening, stopListening, isSupported } = useSpeechRecognition({
+    language: LANGUAGE_LOCALES[language],
+    onResult: handleSpeechResult,
+    continuous: false
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -58,7 +66,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     setImagePreview(null);
   }, [imageFile]);
-  
+
   // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -70,56 +78,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [inputText]);
 
-  // Setup Speech Recognition
-  useEffect(() => {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      console.warn("Speech Recognition API is not supported in this browser.");
-      return;
-    }
-    
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = false; // Stop recording automatically after a pause
-    recognition.interimResults = true;
-    recognition.lang = language;
-    
-    // A simplified and more robust handler for processing speech results.
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = Array.from(event.results)
-        .map(result => result[0].transcript)
-        .join('');
-      setInputText(transcript);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
-
-    // Fix: Use strongly-typed event for onerror.
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // The 'no-speech' error is a common occurrence when the user doesn't speak.
-      // We handle it gracefully by stopping the recording without logging a console error.
-      if (event.error !== 'no-speech') {
-        console.error("Speech recognition error:", event.error);
-      }
-      setIsRecording(false);
-    };
-    
-    recognitionRef.current = recognition;
-  }, [language]);
-
-
   const handleMicClick = () => {
-    if (!isOnline) return; // Disable mic when offline
-    if (isRecording) {
-      recognitionRef.current?.stop();
+    if (!isOnline || !isSupported) return;
+    if (isListening) {
+      stopListening();
     } else {
-      setInputText(''); // Clear text before starting new recording
-      recognitionRef.current?.start();
-      setIsRecording(true);
+      startListening();
     }
   };
-
 
   const handleSend = () => {
     if (inputText.trim() || imageFile) {
@@ -148,16 +114,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setImageFile(e.target.files[0]);
     }
   };
-  
+
   const removeImage = () => {
-      setImageFile(null);
-      if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-      }
+    setImageFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }
-  
+
   const handlePromptClick = (prompt: string) => {
-      onSendMessage(prompt, null);
+    onSendMessage(prompt, null);
   }
 
   const canSendMessage = (!!inputText.trim() || !!imageFile) && !isLoading && !isStreaming && isOnline;
@@ -195,7 +161,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
         <div className="relative flex items-end bg-white dark:bg-[#161B22] rounded-2xl p-2 shadow-lg transition-shadow duration-300 focus-within:ring-2 focus-within:ring-green-500 border border-gray-200 dark:border-gray-700">
           <button onClick={handleAttachmentClick} title="Attach image" className="text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline}>
-              <AttachmentIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+            <AttachmentIcon className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
           <input
             type="file"
@@ -205,22 +171,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             accept="image/*"
             disabled={!isOnline}
           />
-          <button 
-              onClick={handleMicClick}
-              title={isRecording ? TRANSLATIONS.stopRecording[language] : TRANSLATIONS.startRecording[language]}
-              className={`p-2 rounded-full transition-colors ${isRecording ? 'text-red-500 animate-pulse' : 'text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400'} disabled:opacity-50 disabled:cursor-not-allowed`}
-              disabled={!isOnline}
+          <button
+            onClick={handleMicClick}
+            title={isListening ? TRANSLATIONS.stopRecording[language] : TRANSLATIONS.startRecording[language]}
+            className={`p-2 rounded-full transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400'} disabled:opacity-50 disabled:cursor-not-allowed`}
+            disabled={!isOnline}
           >
-              <MicrophoneIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+            <MicrophoneIcon className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
-           <button 
-              onClick={() => setIsLiveModalOpen(true)}
-              title={TRANSLATIONS.liveSession[language]}
-              aria-label={TRANSLATIONS.liveSession[language]}
-              className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!isOnline}
+          <button
+            onClick={() => setIsLiveModalOpen(true)}
+            title={TRANSLATIONS.liveSession[language]}
+            aria-label={TRANSLATIONS.liveSession[language]}
+            className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!isOnline}
           >
-              <VideoCameraIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+            <VideoCameraIcon className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
 
           <textarea
@@ -233,7 +199,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             rows={1}
             disabled={!isOnline}
           />
-          
+
           <button
             onClick={handleSend}
             disabled={!canSendMessage}

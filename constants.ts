@@ -7,6 +7,13 @@ export const LANGUAGES: Language[] = [
   { code: 'ml', name: 'മലയാളം' },
 ];
 
+export const LANGUAGE_LOCALES: Record<LanguageCode, string> = {
+  en: 'en-IN',
+  hi: 'hi-IN',
+  mr: 'mr-IN',
+  ml: 'ml-IN',
+};
+
 export const INDIAN_STATES_DISTRICTS: Record<string, string[]> = {
   'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Nellore'],
   'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Alappuzha'],
@@ -488,24 +495,24 @@ export const TRANSLATIONS: Translations = {
 };
 
 export const WELCOME_PROMPTS: Record<LanguageCode, string[]> = {
-    en: [
-        "How can I treat leaf spot disease on my banana plant?",
-        "What is a good fertilizer for coconut trees in sandy soil?",
-        "Identify this pest in my paddy field."
-    ],
-    hi: [
-        "मेरे केले के पौधे पर पत्ती धब्बे की बीमारी का इलाज कैसे करें?",
-        "रेतीली मिट्टी में नारियल के पेड़ों के लिए अच्छा उर्वरक कौन सा है?",
-        "मेरे धान के खेत में इस कीट को पहचानें।"
-    ],
-    mr: [
-        "माझ्या केळीच्या झाडावरील पानांच्या ठिपक्यांच्या रोगावर उपचार कसे करावे?",
-        "वाळूमिश्रित जमिनीत नारळाच्या झाडांसाठी कोणते खत चांगले आहे?",
-        "माझ्या भाताच्या शेतातील हा कीटक ओळखा."
-    ],
-    ml: [
-        "എൻ്റെ വാഴയിലെ ഇലപ്പുള്ളി രോഗം എങ്ങനെ ചികിത്സിക്കാം?",
-        "മണൽ മണ്ണിൽ തെങ്ങിന് നല്ല വളം ഏതാണ്?",
-        "എൻ്റെ നെൽക്കൃഷിയിലെ ഈ കീടത്തെ തിരിച്ചറിയുക."
-    ]
+  en: [
+    "How can I treat leaf spot disease on my banana plant?",
+    "What is a good fertilizer for coconut trees in sandy soil?",
+    "Identify this pest in my paddy field."
+  ],
+  hi: [
+    "मेरे केले के पौधे पर पत्ती धब्बे की बीमारी का इलाज कैसे करें?",
+    "रेतीली मिट्टी में नारियल के पेड़ों के लिए अच्छा उर्वरक कौन सा है?",
+    "मेरे धान के खेत में इस कीट को पहचानें।"
+  ],
+  mr: [
+    "माझ्या केळीच्या झाडावरील पानांच्या ठिपक्यांच्या रोगावर उपचार कसे करावे?",
+    "वाळूमिश्रित जमिनीत नारळाच्या झाडांसाठी कोणते खत चांगले आहे?",
+    "माझ्या भाताच्या शेतातील हा कीटक ओळखा."
+  ],
+  ml: [
+    "എൻ്റെ വാഴയിലെ ഇലപ്പുള്ളി രോഗം എങ്ങനെ ചികിത്സിക്കാം?",
+    "മണൽ മണ്ണിൽ തെങ്ങിന് നല്ല വളം ഏതാണ്?",
+    "എൻ്റെ നെൽക്കൃഷിയിലെ ഈ കീടത്തെ തിരിച്ചറിയുക."
+  ]
 };

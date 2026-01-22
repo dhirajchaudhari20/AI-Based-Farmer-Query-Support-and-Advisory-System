@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { LanguageCode, SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '../types';
-import { LANGUAGES, TRANSLATIONS, INDIAN_STATES_DISTRICTS } from '../constants';
+import { LANGUAGES, TRANSLATIONS, INDIAN_STATES_DISTRICTS, LANGUAGE_LOCALES } from '../constants';
 import { parseLoginDetailsFromSpeech } from '../services/geminiService';
 import MapPinLogoIcon from './icons/MapPinLogoIcon';
 import SpinnerIcon from './icons/SpinnerIcon';
@@ -17,7 +17,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, initialLanguage }) =
   const [language, setLanguage] = useState<LanguageCode>(initialLanguage);
   const [selectedState, setSelectedState] = useState(Object.keys(INDIAN_STATES_DISTRICTS)[0]);
   const [selectedDistrict, setSelectedDistrict] = useState(INDIAN_STATES_DISTRICTS[selectedState][0]);
-  
+
   const [uiState, setUiState] = useState<'idle' | 'speaking_greeting' | 'listening' | 'parsing' | 'manual' | 'loggingIn'>('idle');
   const [manualIsSubmitting, setManualIsSubmitting] = useState(false);
   const [hasBeenGreeted, setHasBeenGreeted] = useState(false);
@@ -36,12 +36,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, initialLanguage }) =
       setUiState('manual'); // Fallback if API is missing
       return;
     }
-    
+
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = false;
-    // Listen for a mix of languages, as users might switch. Gemini will parse it.
-    recognition.lang = 'hi-IN';
+    // Listen in the selected language
+    recognition.lang = LANGUAGE_LOCALES[language];
 
     recognition.onresult = async (event: SpeechRecognitionEvent) => {
       const transcript = event.results[0][0].transcript;
@@ -76,55 +76,58 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, initialLanguage }) =
       if (uiState === 'listening') setUiState('idle');
     };
     recognitionRef.current = recognition;
-  // The 'uiState' dependency is removed to prevent re-creating the recognition object on every state change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // The 'uiState' dependency is removed to prevent re-creating the recognition object on every state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onLogin]);
 
 
   // This function is now more robust against browsers' asynchronous voice loading.
   const speakGreetingAndListen = () => {
-      if (typeof window.speechSynthesis === 'undefined') {
-          console.warn("Speech Synthesis API not supported, falling back to manual entry.");
-          setUiState('manual');
-          return;
-      }
-      
-      // Cancel any ongoing speech from previous actions to prevent overlaps.
-      window.speechSynthesis.cancel();
-      
-      const greetingText = TRANSLATIONS.loginGreetingSpokenFull[language];
-      const utterance = new SpeechSynthesisUtterance(greetingText);
-      
-      // This is the crucial fix: Set the language on the utterance itself.
-      // This allows the browser to select a default voice for the language
-      // even if the full voice list hasn't loaded yet.
-      utterance.lang = language; 
-      
-      const voices = window.speechSynthesis.getVoices();
-      // If voices are available, we can try to pick a higher-quality one.
-      if (voices.length > 0) {
-          const selectedVoice = voices.find(v => v.lang.startsWith(language) && v.name.includes('Google')) 
-                             || voices.find(v => v.lang.startsWith(language) && v.localService) 
-                             || voices.find(v => v.lang.startsWith(language));
-          if (selectedVoice) {
-              utterance.voice = selectedVoice;
-          }
-      }
-      
-      utterance.onend = () => {
-          setUiState('listening');
-          recognitionRef.current?.start();
-      };
-      
-      utterance.onerror = (event) => {
-          console.error("SpeechSynthesis Error:", event.error);
-          setUiState('manual'); // Fallback if TTS fails
-      };
+    if (typeof window.speechSynthesis === 'undefined') {
+      console.warn("Speech Synthesis API not supported, falling back to manual entry.");
+      setUiState('manual');
+      return;
+    }
 
-      window.speechSynthesis.speak(utterance);
-      setHasBeenGreeted(true);
+    // Cancel any ongoing speech from previous actions to prevent overlaps.
+    window.speechSynthesis.cancel();
+
+    const greetingText = TRANSLATIONS.loginGreetingSpokenFull[language];
+    const utterance = new SpeechSynthesisUtterance(greetingText);
+
+    // This is the crucial fix: Set the language on the utterance itself.
+    // This allows the browser to select a default voice for the language
+    // even if the full voice list hasn't loaded yet.
+    utterance.lang = language;
+
+    const voices = window.speechSynthesis.getVoices();
+    // If voices are available, we can try to pick a higher-quality one.
+    if (voices.length > 0) {
+      const selectedVoice = voices.find(v => v.lang.startsWith(language) && v.name.includes('Google'))
+        || voices.find(v => v.lang.startsWith(language) && v.localService)
+        || voices.find(v => v.lang.startsWith(language));
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+    }
+
+    utterance.onend = () => {
+      setUiState('listening');
+      recognitionRef.current?.start();
+    };
+
+    utterance.onerror = (event) => {
+      // Ignore 'interrupted' error which happens when multiple speech events overlap
+      if (event.error !== 'interrupted') {
+        console.error("SpeechSynthesis Error:", event.error);
+        setUiState('manual');
+      }
+    };
+
+    window.speechSynthesis.speak(utterance);
+    setHasBeenGreeted(true);
   };
-  
+
   // This handler is simplified to call the speech function directly,
   // ensuring it's part of the user's click action and not blocked by the browser.
   const handleMicClick = () => {
@@ -132,17 +135,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, initialLanguage }) =
       recognitionRef.current?.stop();
       return;
     }
-    
+
     // On the first click, play the greeting. On subsequent clicks, start listening immediately.
     if (!hasBeenGreeted) {
-        setUiState('speaking_greeting');
-        speakGreetingAndListen();
+      setUiState('speaking_greeting');
+      speakGreetingAndListen();
     } else {
       setUiState('listening');
       recognitionRef.current?.start();
     }
   };
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim() && selectedState && selectedDistrict) {
@@ -154,25 +157,25 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, initialLanguage }) =
   };
 
   const getButtonContent = () => {
-    switch(uiState) {
-        case 'speaking_greeting': return <SpeakerIcon />;
-        case 'listening': return <div className="h-10 w-10 bg-red-500 rounded-full animate-pulse" />;
-        case 'parsing':
-        case 'loggingIn': return <SpinnerIcon className="h-10 w-10 text-green-500" />;
-        default: return <MicrophoneIcon className="h-10 w-10" />;
+    switch (uiState) {
+      case 'speaking_greeting': return <SpeakerIcon />;
+      case 'listening': return <div className="h-10 w-10 bg-red-500 rounded-full animate-pulse" />;
+      case 'parsing':
+      case 'loggingIn': return <SpinnerIcon className="h-10 w-10 text-green-500" />;
+      default: return <MicrophoneIcon className="h-10 w-10" />;
     }
   }
-  
+
   const getPromptText = () => {
-    switch(uiState) {
-        case 'speaking_greeting': return TRANSLATIONS.loginListenPrompt[language];
-        case 'listening': return TRANSLATIONS.loginListeningPrompt[language];
-        case 'parsing': return TRANSLATIONS.loginProcessing[language];
-        case 'loggingIn': return `${TRANSLATIONS.welcomeBack[language]}!`;
-        case 'manual': return TRANSLATIONS.loginManualHeader[language];
-        case 'idle':
-        default:
-            return TRANSLATIONS.loginStartPrompt[language];
+    switch (uiState) {
+      case 'speaking_greeting': return TRANSLATIONS.loginListenPrompt[language];
+      case 'listening': return TRANSLATIONS.loginListeningPrompt[language];
+      case 'parsing': return TRANSLATIONS.loginProcessing[language];
+      case 'loggingIn': return `${TRANSLATIONS.welcomeBack[language]}!`;
+      case 'manual': return TRANSLATIONS.loginManualHeader[language];
+      case 'idle':
+      default:
+        return TRANSLATIONS.loginStartPrompt[language];
     }
   }
 
@@ -188,101 +191,101 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, initialLanguage }) =
             {getPromptText()}
           </p>
         </div>
-        
-        {uiState !== 'manual' && (
-             <div className="flex flex-col items-center space-y-6">
-                <button
-                    onClick={handleMicClick}
-                    disabled={['parsing', 'loggingIn', 'speaking_greeting'].includes(uiState)}
-                    className="w-24 h-24 flex items-center justify-center rounded-full bg-white dark:bg-gray-700 text-green-500 dark:text-green-400 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-wait transition-all duration-300 ring-4 ring-green-500/20 hover:ring-green-500/40"
-                    aria-label="Start voice login"
-                >
-                    {getButtonContent()}
-                </button>
-                <button onClick={() => setUiState('manual')} className="text-sm text-gray-500 dark:text-gray-400 hover:underline">
-                    {TRANSLATIONS.loginManualButton[language]}
-                </button>
-            </div>
-        )}
-       
-        {uiState === 'manual' && (
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-[#161B22] shadow-xl rounded-2xl p-6 sm:p-8 space-y-6 border border-gray-200 dark:border-gray-700/80 text-left animate-fade-in">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {TRANSLATIONS.nameLabel[language]}
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  disabled={manualIsSubmitting}
-                  className="w-full p-2.5 text-sm bg-slate-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-800 dark:text-gray-200 disabled:opacity-50"
-                  placeholder="e.g., Rohan Kumar"
-                />
-              </div>
 
+        {uiState !== 'manual' && (
+          <div className="flex flex-col items-center space-y-6">
+            <button
+              onClick={handleMicClick}
+              disabled={['parsing', 'loggingIn', 'speaking_greeting'].includes(uiState)}
+              className="w-24 h-24 flex items-center justify-center rounded-full bg-white dark:bg-gray-700 text-green-500 dark:text-green-400 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-wait transition-all duration-300 ring-4 ring-green-500/20 hover:ring-green-500/40"
+              aria-label="Start voice login"
+            >
+              {getButtonContent()}
+            </button>
+            <button onClick={() => setUiState('manual')} className="text-sm text-gray-500 dark:text-gray-400 hover:underline">
+              {TRANSLATIONS.loginManualButton[language]}
+            </button>
+          </div>
+        )}
+
+        {uiState === 'manual' && (
+          <form onSubmit={handleSubmit} className="bg-white dark:bg-[#161B22] shadow-xl rounded-2xl p-6 sm:p-8 space-y-6 border border-gray-200 dark:border-gray-700/80 text-left animate-fade-in">
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {TRANSLATIONS.nameLabel[language]}
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={manualIsSubmitting}
+                className="w-full p-2.5 text-sm bg-slate-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-800 dark:text-gray-200 disabled:opacity-50"
+                placeholder="e.g., Rohan Kumar"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="language-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {TRANSLATIONS.languageLabel[language]}
+              </label>
+              <select
+                id="language-select"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as LanguageCode)}
+                disabled={manualIsSubmitting}
+                className="w-full p-2.5 text-sm bg-slate-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-800 dark:text-gray-200 disabled:opacity-50"
+              >
+                {LANGUAGES.map(lang => (
+                  <option key={lang.code} value={lang.code}>{lang.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="language-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {TRANSLATIONS.languageLabel[language]}
+                <label htmlFor="state-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {TRANSLATIONS.stateLabel[language]}
                 </label>
                 <select
-                  id="language-select"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as LanguageCode)}
+                  id="state-select"
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
                   disabled={manualIsSubmitting}
                   className="w-full p-2.5 text-sm bg-slate-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-800 dark:text-gray-200 disabled:opacity-50"
                 >
-                  {LANGUAGES.map(lang => (
-                    <option key={lang.code} value={lang.code}>{lang.name}</option>
+                  {Object.keys(INDIAN_STATES_DISTRICTS).map(stateName => (
+                    <option key={stateName} value={stateName}>{stateName}</option>
                   ))}
                 </select>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="state-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {TRANSLATIONS.stateLabel[language]}
-                  </label>
-                  <select
-                    id="state-select"
-                    value={selectedState}
-                    onChange={(e) => setSelectedState(e.target.value)}
-                    disabled={manualIsSubmitting}
-                    className="w-full p-2.5 text-sm bg-slate-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-800 dark:text-gray-200 disabled:opacity-50"
-                  >
-                    {Object.keys(INDIAN_STATES_DISTRICTS).map(stateName => (
-                      <option key={stateName} value={stateName}>{stateName}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="district-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {TRANSLATIONS.locationLabel[language]}
-                  </label>
-                  <select
-                    id="district-select"
-                    value={selectedDistrict}
-                    onChange={(e) => setSelectedDistrict(e.target.value)}
-                    disabled={!INDIAN_STATES_DISTRICTS[selectedState]?.length || manualIsSubmitting}
-                    className="w-full p-2.5 text-sm bg-slate-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-800 dark:text-gray-200 disabled:opacity-50"
-                  >
-                    {(INDIAN_STATES_DISTRICTS[selectedState] || []).map(districtName => (
-                      <option key={districtName} value={districtName}>{districtName}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label htmlFor="district-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {TRANSLATIONS.locationLabel[language]}
+                </label>
+                <select
+                  id="district-select"
+                  value={selectedDistrict}
+                  onChange={(e) => setSelectedDistrict(e.target.value)}
+                  disabled={!INDIAN_STATES_DISTRICTS[selectedState]?.length || manualIsSubmitting}
+                  className="w-full p-2.5 text-sm bg-slate-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors text-gray-800 dark:text-gray-200 disabled:opacity-50"
+                >
+                  {(INDIAN_STATES_DISTRICTS[selectedState] || []).map(districtName => (
+                    <option key={districtName} value={districtName}>{districtName}</option>
+                  ))}
+                </select>
               </div>
-              
-              <button
-                type="submit"
-                disabled={manualIsSubmitting || !name.trim()}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 dark:focus:ring-offset-gray-900 transition-all shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {manualIsSubmitting ? <SpinnerIcon className="h-5 w-5" /> : TRANSLATIONS.loginButton[language]}
-              </button>
-            </form>
+            </div>
+
+            <button
+              type="submit"
+              disabled={manualIsSubmitting || !name.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 dark:focus:ring-offset-gray-900 transition-all shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {manualIsSubmitting ? <SpinnerIcon className="h-5 w-5" /> : TRANSLATIONS.loginButton[language]}
+            </button>
+          </form>
         )}
       </div>
     </div>
