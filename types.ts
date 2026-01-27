@@ -2,7 +2,7 @@
 
 export type Role = 'user' | 'model';
 
-export type LanguageCode = 'en' | 'ml' | 'mr' | 'hi';
+export type LanguageCode = 'en' | 'ml' | 'mr' | 'hi' | 'gu';
 
 export type Theme = 'light' | 'dark';
 
@@ -37,6 +37,13 @@ export interface ChatMetadata {
 // Represents a logged-in user
 export interface User {
   name: string;
+}
+
+export interface CurrentWeather {
+  temp: number;
+  humidity: number;
+  condition: string;
+  location: string;
 }
 
 

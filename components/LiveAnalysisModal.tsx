@@ -1,71 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-// Fix: Remove non-existent 'LiveSession' from imports. The session type is not exported and should be inferred.
-import { GoogleGenAI, Modality, LiveServerMessage, Blob as GenAI_Blob } from '@google/genai';
-import type { LanguageCode, User } from '../types';
-import { TRANSLATIONS, LANGUAGES } from '../constants';
-import { analyticsService, CurrentWeather } from '../services/analyticsService';
-import { getGenAI } from '../services/geminiService';
-import UserIcon from './icons/UserIcon';
-import BotIcon from './icons/BotIcon';
 
-// --- Gemini API Initialization removed (lazy loaded) ---
-
-// --- Audio Encoding/Decoding Helpers (as per Gemini docs) ---
-function encode(bytes: Uint8Array): string {
-  let binary = '';
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function decode(base64: string): Uint8Array {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function decodeAudioData(
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number,
-  numChannels: number,
-): Promise<AudioBuffer> {
-  const dataInt16 = new Int16Array(data.buffer);
-  const frameCount = dataInt16.length / numChannels;
-  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-
-  for (let channel = 0; channel < numChannels; channel++) {
-    const channelData = buffer.getChannelData(channel);
-    for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-    }
-  }
-  return buffer;
-}
-
-const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      const base64Data = result.split(',')[1];
-      if (base64Data) {
-        resolve(base64Data);
-      } else {
-        reject(new Error("Failed to read blob as base64"));
-      }
-    };
-    reader.onerror = (error) => reject(error);
-    reader.readAsDataURL(blob);
-  });
-};
-
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { TRANSLATIONS } from '../constants';
+// Removed unused icons
+import { MultimodalLiveClient } from '../utils/websocket_client';
+import { LanguageCode, User } from '../types';
 
 interface LiveAnalysisModalProps {
   isOpen: boolean;
@@ -75,296 +13,434 @@ interface LiveAnalysisModalProps {
   user: User;
 }
 
-const FRAME_RATE = 30; // Increased from 20 for lower latency
-const JPEG_QUALITY = 0.6; // Keep quality low for faster uploads
+const UserIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">
+    <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" fill="currentColor" />
+  </svg>
+)
 
-const getLiveSystemInstruction = (userName: string, location: string, language: LanguageCode, weather: CurrentWeather | null): string => {
-  const langName = LANGUAGES.find(l => l.code === language)?.name || 'English';
-  // The weather information is now a core part of the context.
-  const weatherContext = weather
-    ? `\n**CRITICAL CONTEXT: CURRENT WEATHER IN ${location.toUpperCase()}**\n- Conditions: ${weather.condition}\n- Temperature: ${weather.temp}\n- Humidity: ${weather.humidity}%\nThis environmental data is crucial. Your diagnosis MUST consider these conditions. For example, high humidity greatly increases the likelihood of fungal diseases.`
-    : '';
+const BotIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">
+    <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="currentColor" />
+    <path d="M12 6C10.9 6 10 6.9 10 8C10 9.1 10.9 10 12 10C13.1 10 14 9.1 14 8C14 6.9 13.1 6 12 6Z" fill="currentColor" />
+    <path d="M12 14C10.9 14 10 14.9 10 16C10 17.1 10.9 18 12 18C13.1 18 14 17.1 14 16C14 14.9 13.1 14 12 14Z" fill="currentColor" />
+  </svg>
+)
 
-  return `You are Agri-Intel, an expert AI field partner, in a live, real-time video call with a farmer named ${userName}. You are receiving a continuous video stream. Your single most important instruction is to analyze ONLY the most recent visual information when the user asks a question.${weatherContext}
 
-**--- CRITICAL OPERATING PROCEDURE ---**
-1.  **OBSERVE THE LIVE FEED:** You will receive a constant stream of video frames.
-2.  **ANALYZE THE CURRENT FRAME + WEATHER:** When a question is asked, your analysis MUST be based *exclusively* on what is visible in the video at that exact moment, COMBINED with the critical weather context provided above.
-3.  **FORGET PREVIOUS IMAGES:** You MUST completely discard any memory or context of what you saw in previous frames. If the user showed a red beetle, and now shows a green leafhopper and asks "what is this?", you must ONLY talk about the green leafhopper.
-4.  **RESPOND IMMEDIATELY:** Provide a concise diagnosis and actionable solution based on this fresh analysis.
+// Configuration
+const URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent";
+// @ts-ignore
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+const MODEL = "models/gemini-2.0-flash-exp";
+// const FRAME_RATE = 60; // Now handled separately for Preview (30) and Analysis (5)
+const JPEG_QUALITY = 0.5;
 
-**Example of what to do:**
-- User shows a tomato leaf with yellow spots. Asks: "What's wrong with my plant?" (Weather is humid).
-- You see the yellow spots and consider the high humidity. You respond: "I see those yellow spots, ${userName}. Given the high humidity today, this is likely an early sign of fungal blight..."
-- User then moves the camera to a white, fuzzy bug on the stem. Asks: "Okay, and what is this thing?"
-- You see the white bug. You FORGET the yellow spots. You respond: "That appears to be a mealybug. Here is a simple way to get rid of them..."
-
-**Key Rules:**
-- **LANGUAGE:** Your entire spoken response MUST be in ${langName}.
-- **PERSONALITY:** Be a helpful, conversational partner. Address the user by name, ${userName}.
-- **SCOPE:** Your function is strictly limited to agricultural analysis of the live video.
-- **ORIGIN:** If asked, state you were developed by students from St. John College of Engineering and Management.`;
+// Utility functions for audio/video processing
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
 }
+
+function decode(base64: string): ArrayBuffer {
+  return base64ToUint8Array(base64).buffer as unknown as ArrayBuffer;
+}
+
+async function decodeAudioData(
+  arrayBuffer: ArrayBuffer,
+  audioContext: AudioContext,
+  sampleRate: number = 24000,
+  numberOfChannels: number = 1
+): Promise<AudioBuffer> {
+
+  // Create an audio buffer manually (since we know the raw PCM format)
+  // The server sends RAW PCM 16-bit little-endian
+  const pcm16 = new Int16Array(arrayBuffer);
+  const audioContent = new Float32Array(pcm16.length);
+
+  for (let i = 0; i < pcm16.length; i++) {
+    // Convert 16-bit integer to float [-1.0, 1.0]
+    audioContent[i] = pcm16[i] / 32768.0;
+  }
+
+  const audioBuffer = audioContext.createBuffer(numberOfChannels, audioContent.length, sampleRate);
+  audioBuffer.getChannelData(0).set(audioContent);
+  return audioBuffer;
+}
+
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+
+type Status = 'disconnected' | 'connecting' | 'connected' | 'error';
+type LiveServerMessage = any;
 
 const LiveAnalysisModal: React.FC<LiveAnalysisModalProps> = ({ isOpen, onClose, language, location, user }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const frameTimeoutRef = useRef<number | null>(null);
-
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [status, setStatus] = useState<Status>('disconnected');
   const [userTranscript, setUserTranscript] = useState('');
   const [modelTranscript, setModelTranscript] = useState('');
 
-  // Fix: Use generic promise type to avoid dependency on 'ai' instance which is now local.
-  const sessionPromiseRef = useRef<Promise<any> | null>(null);
-
+  // Refs to keep track of WebContext/Websocket state to avoid closure staleness in event handlers
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
-  const inputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const sessionPromiseRef = useRef<Promise<MultimodalLiveClient> | null>(null);
+  const currentTurnTextRef = useRef('');
+  const frameTimeoutRef = useRef<number | null>(null);
 
-  const cleanup = useCallback(() => {
-    console.log('Cleaning up live session resources...');
-    window.speechSynthesis.cancel(); // Stop any greeting speech
-
-    if (frameTimeoutRef.current) {
-      window.clearTimeout(frameTimeoutRef.current);
-      frameTimeoutRef.current = null;
-    }
-
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
-
-    if (sessionPromiseRef.current) {
-      sessionPromiseRef.current.then(session => {
-        console.log("Closing session");
-        session.close();
-      }).catch(e => console.error("Error closing session:", e));
-      sessionPromiseRef.current = null;
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    outputAudioContextRef.current?.close().catch(e => console.error("Error closing output audio context:", e));
-    outputAudioContextRef.current = null;
-
-    inputAudioContextRef.current?.close().catch(e => console.error("Error closing input audio context:", e));
-    inputAudioContextRef.current = null;
-
-    audioSourcesRef.current.forEach(source => source.stop());
-    audioSourcesRef.current.clear();
-    nextStartTimeRef.current = 0;
-
-    setStatus('idle');
-    setUserTranscript('');
-    setModelTranscript('');
-
-  }, []);
-
-  const handleClose = () => {
-    cleanup();
-    onClose();
-  };
-
-  const speakGreeting = useCallback((userName: string, lang: LanguageCode) => {
-    const greetingText = TRANSLATIONS.liveSessionGreeting[lang].replace('{name}', userName);
-    const utterance = new SpeechSynthesisUtterance(greetingText);
-
+  // TTS Helper
+  const speak = useCallback((text: string) => {
+    if (!text) return;
+    window.speechSynthesis.cancel(); // Stop previous
+    const utterance = new SpeechSynthesisUtterance(text);
+    // Try to find a voice matching the language
     const voices = window.speechSynthesis.getVoices();
-    const selectedVoice = voices.find(v => v.lang.startsWith(lang) && v.name.includes('Google')) || voices.find(v => v.lang.startsWith(lang) && v.localService) || voices.find(v => v.lang.startsWith(lang));
+    const langPrefix = language === 'hi' ? 'hi' : language === 'mr' ? 'mr' : language === 'ml' ? 'ml' : language === 'gu' ? 'gu' : 'en-IN'; // Default to Indian English if not found
 
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
+    // Prioritize "Google" voices or native ones
+    const voice = voices.find(v => v.lang.startsWith(langPrefix) && v.name.includes("Google")) ||
+      voices.find(v => v.lang.startsWith(langPrefix));
+
+    if (voice) {
+      utterance.voice = voice;
     }
-
+    utterance.lang = langPrefix;
     window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [language]);
 
   useEffect(() => {
+    let mounted = true;
+
+    // Pre-load voices
+    window.speechSynthesis.getVoices();
+
     if (isOpen) {
       startSession();
     } else {
       cleanup();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => {
+      mounted = false;
+      cleanup();
+    };
   }, [isOpen]);
 
-  const startSession = async () => {
-    if (status !== 'idle') return;
+  const cleanup = () => {
+    // 1. Stop Video Stream
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
 
-    setStatus('connecting');
-    outputAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+    // 2. Stop Audio Contexts
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    // Clean up output audio sources
+    audioSourcesRef.current.forEach(source => {
+      try { source.stop(); } catch (e) { } // ignore if already stopped
+    });
+    audioSourcesRef.current.clear();
+
+    if (outputAudioContextRef.current) {
+      outputAudioContextRef.current.close();
+      outputAudioContextRef.current = null;
+    }
+    nextStartTimeRef.current = 0;
+
+
+    // 3. Close Websocket Session
+    if (sessionPromiseRef.current) {
+      sessionPromiseRef.current.then(session => {
+        session.disconnect();
+      }).catch(() => { }); // ignore errors during disconnect
+      sessionPromiseRef.current = null;
+    }
+
+    // 4. Clear Loop Timers
+    if (frameTimeoutRef.current) {
+      window.clearTimeout(frameTimeoutRef.current);
+      frameTimeoutRef.current = null;
+    }
+
+    // 5. Reset State
+    setStatus('disconnected');
+    setUserTranscript('');
+    setModelTranscript('');
+  };
+
+  const handleClose = () => {
+    cleanup();
+    onClose();
+  }
+
+
+  const startSession = async () => {
+    if (!API_KEY) {
+      console.error("Missing VITE_GEMINI_API_KEY");
+      setStatus('error');
+      return;
+    }
 
     try {
-      // Fetch real-time weather data to ground the AI
-      const weatherData = analyticsService.getCurrentWeather(location);
+      setStatus('connecting');
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      // Initialize Audio Context for playback
+      const outputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      outputAudioContextRef.current = outputAudioCtx;
+
+      // Initialize Video & Input Audio Stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+          frameRate: { ideal: 30 } // Preview frame rate (Smooth for user)
+        },
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true
+        }
+      });
+
       mediaStreamRef.current = stream;
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // videoRef.current.play() is called in the event listener below or implicitly by autoPlay
       }
 
-      const ai = getGenAI();
-      const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-        config: {
-          responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          systemInstruction: getLiveSystemInstruction(user.name, location, language, weatherData),
-        },
-        callbacks: {
-          onopen: () => {
-            console.log('Session opened.');
-            setStatus('connected');
-            speakGreeting(user.name, language); // Speak personalized greeting
-
-            const inputAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            inputAudioContextRef.current = inputAudioContext; // Save for cleanup
-
-            inputAudioContext.audioWorklet.addModule('/audio-processor.js').then(() => {
-              const source = inputAudioContext.createMediaStreamSource(stream);
-              const worklet = new AudioWorkletNode(inputAudioContext, 'pcm-processor');
-
-              worklet.port.onmessage = (event) => {
-                const inputData = event.data;
-                const l = inputData.length;
-                const int16 = new Int16Array(l);
-                for (let i = 0; i < l; i++) {
-                  int16[i] = inputData[i] * 32768;
-                }
-                const pcmBlob: GenAI_Blob = {
-                  data: encode(new Uint8Array(int16.buffer)),
-                  mimeType: 'audio/pcm;rate=16000',
-                };
-                sessionPromiseRef.current?.then(session => {
-                  session.sendRealtimeInput({ media: pcmBlob });
-                });
-              };
-
-              source.connect(worklet);
-              worklet.connect(inputAudioContext.destination);
-            }).catch(e => console.error("Failed to load audio worklet:", e));
-
-            if (videoRef.current && canvasRef.current) {
-              const videoEl = videoRef.current;
-
-              const startFrameCapture = () => {
-                const canvasEl = canvasRef.current!;
-                const ctx = canvasEl.getContext('2d');
-                if (!ctx) return;
-
-                const frameLoop = async () => {
-                  if (!mediaStreamRef.current) return; // Stop loop if stream is gone
-
-                  try {
-                    if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
-                      canvasEl.width = videoEl.videoWidth;
-                      canvasEl.height = videoEl.videoHeight;
-                      ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight);
-
-                      const blob = await new Promise<Blob | null>(resolve => canvasEl.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
-
-                      if (blob && mediaStreamRef.current) {
-                        const base64Data = await blobToBase64(blob);
-                        const session = await sessionPromiseRef.current;
-                        if (session && mediaStreamRef.current) {
-                          session.sendRealtimeInput({
-                            media: { data: base64Data, mimeType: 'image/jpeg' }
-                          });
-                        }
-                      }
-                    }
-                  } catch (e) {
-                    console.error("Error in frame capture loop:", e);
-                  } finally {
-                    // Schedule the next frame only after the current one is done processing
-                    if (mediaStreamRef.current) { // Only schedule if the stream is still active
-                      frameTimeoutRef.current = window.setTimeout(frameLoop, 1000 / FRAME_RATE);
-                    }
-                  }
-                };
-
-                // Start the loop
-                frameLoop();
-              };
-
-              // This is a critical fix: The 'playing' event ensures the video has valid dimensions
-              // and is actually rendering before we try to capture frames from it.
-              videoEl.addEventListener('playing', startFrameCapture, { once: true });
-              videoEl.play().catch(e => { // Autoplay might be blocked
-                console.error("Video play failed:", e);
-                // You might want to show a "Click to Start" button here as a fallback
-              });
-            }
-
+      // Initialize Client
+      const sessionPromise = new MultimodalLiveClient({ apiKey: API_KEY, url: URL })
+        .connect({
+          model: MODEL,
+          // Setup initial generation config if needed
+          generationConfig: {
+            responseModalities: "text", // We will use Browser TTS for native Indian accents
           },
+          systemInstruction: {
+            parts: [{
+              text: `You are "Agri-Intel", an expert Indian agricultural advisor.
+User Location: ${location}.
+Language: ${language === 'hi' ? 'Hindi' : language === 'mr' ? 'Marathi' : language === 'ml' ? 'Malayalam' : language === 'gu' ? 'Gujarati' : 'English'}.
+
+CRITICAL INSTRUCTIONS:
+1. Speak ONLY in ${language === 'hi' ? 'Hindi' : language === 'mr' ? 'Marathi' : language === 'ml' ? 'Malayalam' : language === 'gu' ? 'Gujarati' : 'English'}.
+2. Use a typical INDIAN ACCENT and tone in your writing style (e.g. use "Namaste", "Ji", "Ram Ram").
+3. Be warm, respectful, and talk like a knowledgeable local farmer/advisor.
+4. Greet the user immediately in the target language.
+5. Answer questions about crops, pests, and farming.
+` }]
+          }
+        }, {
           onmessage: async (message: LiveServerMessage) => {
             if (message.serverContent?.outputTranscription) {
-              setModelTranscript(prev => prev + message.serverContent!.outputTranscription.text);
+              const text = message.serverContent.outputTranscription.text;
+              setModelTranscript(prev => prev + text);
+              currentTurnTextRef.current += text;
             }
             if (message.serverContent?.inputTranscription) {
               setUserTranscript(prev => prev + message.serverContent!.inputTranscription.text);
             }
             if (message.serverContent?.turnComplete) {
-              setUserTranscript('');
-              setModelTranscript('');
-            }
-            // FIX: Add optional chaining `?.` before accessing `.data`. This prevents a crash
-            // if the server sends a message part that doesn't contain `inlineData` (e.g., a text-only part).
-            const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (base64EncodedAudioString && outputAudioContextRef.current) {
-              const outputAudioContext = outputAudioContextRef.current;
-              const nextStartTime = Math.max(nextStartTimeRef.current, outputAudioContext.currentTime);
-              nextStartTimeRef.current = nextStartTime;
-
-              const audioBuffer = await decodeAudioData(
-                decode(base64EncodedAudioString),
-                outputAudioContext,
-                24000,
-                1,
-              );
-              const source = outputAudioContext.createBufferSource();
-              source.buffer = audioBuffer;
-              source.connect(outputAudioContext.destination);
-
-              const currentSources = audioSourcesRef.current;
-              source.addEventListener('ended', () => {
-                currentSources.delete(source);
-              });
-
-              source.start(nextStartTime);
-              nextStartTimeRef.current = nextStartTime + audioBuffer.duration;
-              currentSources.add(source);
+              // Speak the accumulated text for this turn
+              const textToSpeak = currentTurnTextRef.current;
+              if (textToSpeak) {
+                speak(textToSpeak);
+                // Reset for next turn? No, keep it so we can read it. 
+                // But we need to clear it before the NEXT turn starts.
+                // Actually, let's clear it immediately after sending to TTS, 
+                // so next chunks start fresh.
+                currentTurnTextRef.current = '';
+              }
             }
             if (message.serverContent?.interrupted) {
-              audioSourcesRef.current.forEach(source => source.stop());
-              audioSourcesRef.current.clear();
-              nextStartTimeRef.current = 0;
+              // Stop browser TTS if interrupted
+              window.speechSynthesis.cancel();
+              currentTurnTextRef.current = '';
             }
           },
           onerror: (e: ErrorEvent) => {
             console.error('Session error:', e);
             setStatus('error');
+            cleanup();
           },
           onclose: (e: CloseEvent) => {
-            console.log('Session closed.', { reason: e.reason, code: e.code });
+            console.log('Session closed:', JSON.stringify({ code: e.code, reason: e.reason }));
             // This is a critical check for robustness. If the session closes but our cleanup
             // function hasn't run (which nulls out mediaStreamRef), it means the closure
             // was unexpected (e.g., network drop). We must inform the user.
             if (mediaStreamRef.current) {
               console.error('Session closed unexpectedly.');
               setStatus('error');
+              cleanup(); // Stop frame loop
             }
           },
-        },
-      });
+        });
+
+      sessionPromise.then(async (session) => {
+        setStatus('connected');
+
+        // Trigger greeting with a system signal in TARGET LANGUAGE to force context
+        const greeting = language === 'hi' ? "नमस्ते system." : language === 'mr' ? "नमस्कार system." : "Hello system.";
+        session.send({
+          client_content: {
+            turns: [{ role: "user", parts: [{ text: greeting }] }],
+            turn_complete: true
+          }
+        });
+
+        // --- Audio Input Setup ---
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        audioContextRef.current = audioCtx;
+
+        try {
+          await audioCtx.audioWorklet.addModule('/audio-processor.js');
+        } catch (e) {
+          console.error("Failed to load audio worklet:", e);
+          // Fallback to ScriptProcessor if worklet fails? Or just fail.
+          // For now, let's assume it works or fail hard.
+        }
+
+        const source = audioCtx.createMediaStreamSource(stream);
+
+        const workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+        // Buffer for accumulating audio samples to avoid flooding WebSocket
+        let audioBufferAccumulator: Float32Array = new Float32Array(0);
+        const BUFFER_SIZE = 4096;
+
+        workletNode.port.onmessage = (event) => {
+          if (!session) return;
+          const inputData = event.data; // Float32Array
+
+          // Append to accumulator
+          const newBuffer = new Float32Array(audioBufferAccumulator.length + inputData.length);
+          newBuffer.set(audioBufferAccumulator);
+          newBuffer.set(inputData, audioBufferAccumulator.length);
+          audioBufferAccumulator = newBuffer;
+
+          // Only send if we have enough data (mimicking ScriptProcessor behavior)
+          if (audioBufferAccumulator.length >= BUFFER_SIZE) {
+            const chunkToSend = audioBufferAccumulator.slice(0, BUFFER_SIZE);
+            audioBufferAccumulator = audioBufferAccumulator.slice(BUFFER_SIZE);
+
+            const pcmData = new Int16Array(chunkToSend.length);
+            for (let i = 0; i < chunkToSend.length; i++) {
+              const s = Math.max(-1, Math.min(1, chunkToSend[i]));
+              pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+
+            let binary = '';
+            const uint8 = new Uint8Array(pcmData.buffer);
+            const len = uint8.byteLength;
+            for (let i = 0; i < len; i++) {
+              binary += String.fromCharCode(uint8[i]);
+            }
+            const b64 = btoa(binary);
+
+            session.sendRealtimeInput({
+              media_chunks: [{
+                mime_type: "audio/pcm;rate=16000",
+                data: b64
+              }]
+            });
+          }
+        };
+
+        source.connect(workletNode);
+        workletNode.connect(audioCtx.destination);
+
+
+        // --- Video Input Setup ---
+        const videoEl = videoRef.current;
+        const canvasEl = canvasRef.current;
+
+        if (videoEl && canvasEl) {
+
+          const startFrameCapture = () => {
+            if (!mediaStreamRef.current) return;
+
+            const ctx = canvasEl.getContext('2d');
+            if (!ctx) return;
+
+            const frameLoop = async () => {
+              if (!mediaStreamRef.current) return; // Stop if stream closed
+
+              try {
+                if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+                  canvasEl.width = videoEl.videoWidth;
+                  canvasEl.height = videoEl.videoHeight;
+                  ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight);
+                  console.log("Captured and sending frame."); // Log frame capture for debugging.
+
+                  // Optimize: Reduce quality slightly for faster transmission if needed, keeping 0.5 for now
+                  const blob = await new Promise<Blob | null>(resolve => canvasEl.toBlob(resolve, 'image/jpeg', 0.5));
+
+                  if (blob && mediaStreamRef.current) {
+                    const session = await sessionPromiseRef.current;
+                    // Check backpressure - only send if connection is clear
+                    if (session && mediaStreamRef.current && session.canSendVideo()) {
+                      const base64Data = await blobToBase64(blob);
+                      // Double check session is still open after async op
+                      if (session.isConnected()) {
+                        session.sendRealtimeInput({
+                          media_chunks: [{ data: base64Data, mime_type: 'image/jpeg' }]
+                        });
+                      }
+                    } else {
+                      console.log("Skipping frame to reduce latency (network busy)");
+                    }
+                  }
+                }
+              } catch (e) {
+                console.error("Error in frame capture loop:", e);
+              } finally {
+                // Schedule next frame: Capture at 5 FPS (200ms) for analysis - sufficient for AI and saves bandwidth
+                // The VIDEO PREVIEW remains 30 FPS because of getUserMedia settings.
+                if (mediaStreamRef.current) { // Only schedule if the stream is still active
+                  frameTimeoutRef.current = window.setTimeout(frameLoop, 200);
+                }
+              }
+            };
+
+            // Start the loop
+            frameLoop();
+          };
+
+          // This is a critical fix: The 'playing' event ensures the video has valid dimensions
+          // and is actually rendering before we try to capture frames from it.
+          videoEl.addEventListener('playing', startFrameCapture, { once: true });
+          videoEl.play().catch(e => { // Autoplay might be blocked
+            console.error("Video play failed:", e);
+            // You might want to show a "Click to Start" button here as a fallback
+          });
+        }
+
+      }); // End of session callback
 
       sessionPromiseRef.current = sessionPromise;
 
